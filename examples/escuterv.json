@@ -8,7 +8,7 @@
       "x": -100,
       "y": 0,
       "width": 250,
-      "height": 800,
+      "height": 1000,
       "nameSize": 32,
       "showType": false,
       "fill": "",
@@ -27,37 +27,37 @@
           "id": "pr-if-id-pc4_if_i",
           "name": "pc4_if_i",
           "side": "left",
-          "offset": 0.1
+          "offset": 0.08
         },
         {
           "id": "pr-if-id-pc4_id_o",
           "name": "pc4_id_o",
           "side": "right",
-          "offset": 0.1
+          "offset": 0.08
         },
         {
           "id": "pr-if-id-pc_if_i",
           "name": "pc_if_i",
           "side": "left",
-          "offset": 0.2
+          "offset": 0.16
         },
         {
           "id": "pr-if-id-pc_id_o",
           "name": "pc_id_o",
           "side": "right",
-          "offset": 0.2
+          "offset": 0.16
         },
         {
           "id": "pr-if-id-instr_if_i",
           "name": "instr_if_i",
           "side": "left",
-          "offset": 0.3
+          "offset": 0.24
         },
         {
           "id": "pr-if-id-instr_id_o",
           "name": "instr_id_o",
           "side": "right",
-          "offset": 0.3
+          "offset": 0.24
         },
         {
           "id": "pr-if-id-flush",
@@ -77,10 +77,10 @@
       "id": "pr-id-ex",
       "type": "reg",
       "name": "PR_ID_EX",
-      "x": 772,
+      "x": 773,
       "y": 0,
       "width": 250,
-      "height": 800,
+      "height": 1000,
       "nameSize": 32,
       "showType": false,
       "fill": "",
@@ -99,85 +99,85 @@
           "id": "pr-id-ex-pc4_id_i",
           "name": "pc4_id_i",
           "side": "left",
-          "offset": 0.1
+          "offset": 0.08
         },
         {
           "id": "pr-id-ex-pc4_ex_o",
           "name": "pc4_ex_o",
           "side": "right",
-          "offset": 0.1
+          "offset": 0.08
         },
         {
           "id": "pr-id-ex-rD1_i",
           "name": "rD1_i",
           "side": "left",
-          "offset": 0.2
+          "offset": 0.16
         },
         {
           "id": "pr-id-ex-rD1_o",
           "name": "rD1_o",
           "side": "right",
-          "offset": 0.2
+          "offset": 0.16
         },
         {
           "id": "pr-id-ex-rD2_i",
           "name": "rD2_i",
           "side": "left",
-          "offset": 0.25
+          "offset": 0.2
         },
         {
           "id": "pr-id-ex-rD2_o",
           "name": "rD2_o",
           "side": "right",
-          "offset": 0.25
+          "offset": 0.2
         },
         {
           "id": "pr-id-ex-imm_id_i",
           "name": "imm_id_i",
           "side": "left",
-          "offset": 0.36
+          "offset": 0.288
         },
         {
           "id": "pr-id-ex-imm_ex_o",
           "name": "imm_ex_o",
           "side": "right",
-          "offset": 0.36
+          "offset": 0.288
         },
         {
           "id": "pr-id-ex-rf_we_id_i",
           "name": "rf_we_id_i",
           "side": "left",
-          "offset": 0.6
+          "offset": 0.45
         },
         {
           "id": "pr-id-ex-rf_we_ex_o",
           "name": "rf_we_ex_o",
           "side": "right",
-          "offset": 0.6
+          "offset": 0.45
         },
         {
           "id": "pr-id-ex-wr_id_i",
           "name": "wr_id_i",
           "side": "left",
-          "offset": 0.7
+          "offset": 0.56
         },
         {
           "id": "pr-id-ex-wr_ex_o",
           "name": "wr_ex_o",
           "side": "right",
-          "offset": 0.7
+          "offset": 0.56
         },
         {
           "id": "pr-id-ex-control_i",
           "name": "Control",
           "side": "left",
-          "offset": 0.15
+          "offset": 0.12
         },
         {
           "id": "pr-id-ex-control_o",
           "name": "Control",
           "side": "right",
-          "offset": 0.15
+          "offset": 0.12
         },
         {
           "id": "pr-id-ex-flush",
@@ -195,13 +195,43 @@
           "id": "port-46",
           "name": "pc_jump_id_i",
           "side": "left",
-          "offset": 0.8
+          "offset": 0.64
         },
         {
           "id": "port-47",
           "name": "pc_jump_ex_o",
           "side": "right",
-          "offset": 0.8
+          "offset": 0.64
+        },
+        {
+          "id": "port-246",
+          "name": "exception_signal",
+          "side": "right",
+          "offset": 0.85
+        },
+        {
+          "id": "port-247",
+          "name": "csr_addr_id_i",
+          "side": "left",
+          "offset": 0.75
+        },
+        {
+          "id": "port-248",
+          "name": "csr_addr_ex_o",
+          "side": "right",
+          "offset": 0.75
+        },
+        {
+          "id": "port-265",
+          "name": "csr_signal_o",
+          "side": "right",
+          "offset": 0.95
+        },
+        {
+          "id": "port-270",
+          "name": "csr_signal_i",
+          "side": "left",
+          "offset": 0.95
         }
       ]
     },
@@ -212,7 +242,7 @@
       "x": 1805,
       "y": 0,
       "width": 250,
-      "height": 800,
+      "height": 1000,
       "nameSize": 32,
       "showType": false,
       "fill": "",
@@ -231,73 +261,79 @@
           "id": "pr-ex-mem-rf_we_ex_i",
           "name": "rf_we_ex_i",
           "side": "left",
-          "offset": 0.6
+          "offset": 0.45
         },
         {
           "id": "pr-ex-mem-rf_we_mem_o",
           "name": "rf_we_mem_o",
           "side": "right",
-          "offset": 0.6
+          "offset": 0.45
         },
         {
           "id": "pr-ex-mem-wr_ex_i",
           "name": "wr_ex_i",
           "side": "left",
-          "offset": 0.7
+          "offset": 0.56
         },
         {
           "id": "pr-ex-mem-wr_mem_o",
           "name": "wr_mem_o",
           "side": "right",
-          "offset": 0.7
+          "offset": 0.56
         },
         {
           "id": "pr-ex-mem-alu_result_ex_i",
           "name": "alu_result_ex_i",
           "side": "left",
-          "offset": 0.42
+          "offset": 0.336
         },
         {
           "id": "pr-ex-mem-alu_result_mem_o",
           "name": "alu_result_mem_o",
           "side": "right",
-          "offset": 0.38
+          "offset": 0.304
         },
         {
           "id": "pr-ex-mem-rD2_ex_i",
           "name": "rD2_ex_i",
           "side": "left",
-          "offset": 0.3
+          "offset": 0.24
         },
         {
           "id": "pr-ex-mem-rD2_mem_o",
           "name": "rD2_mem_o",
           "side": "right",
-          "offset": 0.3
+          "offset": 0.24
         },
         {
           "id": "pr-em-mem-control_i",
           "name": "Control",
           "side": "left",
-          "offset": 0.15
+          "offset": 0.12
         },
         {
           "id": "pr-ex-mem-control_o",
           "name": "Control",
           "side": "right",
-          "offset": 0.15
+          "offset": 0.12
         },
         {
           "id": "port-133",
           "name": "rf_wd_EX",
           "side": "left",
-          "offset": 0.8
+          "offset": 0.64
         },
         {
           "id": "port-134",
           "name": "rf_wd_MEM",
           "side": "right",
-          "offset": 0.8
+          "offset": 0.64
+        },
+        {
+          "id": "port-273",
+          "name": "flush",
+          "side": "bottom",
+          "offset": 0.5
         }
       ]
     },
@@ -308,7 +344,7 @@
       "x": 2670,
       "y": 0,
       "width": 250,
-      "height": 800,
+      "height": 1000,
       "nameSize": 32,
       "showType": false,
       "fill": "",
@@ -327,61 +363,67 @@
           "id": "pr-mem-wb-rf_we_mem_i",
           "name": "rf_we_mem_i",
           "side": "left",
-          "offset": 0.6
+          "offset": 0.45
         },
         {
           "id": "pr-mem-wb-rf_we_wb_o",
           "name": "rf_we_wb_o",
           "side": "right",
-          "offset": 0.6
+          "offset": 0.45
         },
         {
           "id": "pr-mem-wb-wr_mem_i",
           "name": "wr_mem_i",
           "side": "left",
-          "offset": 0.7
+          "offset": 0.56
         },
         {
           "id": "pr-mem-wb-wr_wb_o",
           "name": "wr_wb_o",
           "side": "right",
-          "offset": 0.7
+          "offset": 0.56
         },
         {
           "id": "pr-mem-wb-alu_result_mem_i",
           "name": "alu_result_mem_i",
           "side": "left",
-          "offset": 0.38
+          "offset": 0.304
         },
         {
           "id": "pr-mem-wb-alu_result_wb_o",
           "name": "alu_result_wb_o",
           "side": "right",
-          "offset": 0.42
+          "offset": 0.336
         },
         {
           "id": "pr-mem-wb-control_i",
           "name": "Control",
           "side": "left",
-          "offset": 0.15
+          "offset": 0.12
         },
         {
           "id": "pr-mem-wb-control_o",
           "name": "Control",
           "side": "right",
-          "offset": 0.15
+          "offset": 0.12
         },
         {
           "id": "pr-mem-wb-rf_wd_i",
           "name": "rf_wd_MEM",
           "side": "left",
-          "offset": 0.8
+          "offset": 0.64
         },
         {
           "id": "pr-mem-wb-rf_wd_o",
           "name": "rf_wd_WB",
           "side": "right",
-          "offset": 0.8
+          "offset": 0.64
+        },
+        {
+          "id": "port-274",
+          "name": "flush",
+          "side": "bottom",
+          "offset": 0.5
         }
       ]
     },
@@ -702,13 +744,13 @@
       "type": "combo",
       "name": "HazardUnit",
       "x": 1201,
-      "y": 953,
+      "y": 1222,
       "width": 1000,
       "height": 120,
       "nameSize": 24,
       "showType": false,
       "fill": "",
-      "strokeColor": "",
+      "strokeColor": "#ff0000",
       "strokeWidth": 3,
       "muxInputs": 2,
       "muxControlSide": "top",
@@ -828,7 +870,7 @@
       "nameSize": 24,
       "showType": false,
       "fill": "",
-      "strokeColor": "",
+      "strokeColor": "#ffd500",
       "strokeWidth": 3,
       "muxInputs": 2,
       "muxControlSide": "top",
@@ -863,14 +905,14 @@
       "id": "mod-74",
       "type": "mux",
       "name": "Src2",
-      "x": 1187,
+      "x": 1184,
       "y": 168,
       "width": 60,
       "height": 180,
       "nameSize": 14,
       "showType": false,
       "fill": "",
-      "strokeColor": "",
+      "strokeColor": "#ffd500",
       "strokeWidth": 3,
       "muxInputs": 2,
       "muxControlSide": "top",
@@ -953,8 +995,8 @@
       "id": "mod-107",
       "type": "mux",
       "name": "WB1",
-      "x": 1487,
-      "y": 365,
+      "x": 1604,
+      "y": 382,
       "width": 60,
       "height": 180,
       "nameSize": 14,
@@ -969,13 +1011,13 @@
           "id": "port-108",
           "name": "",
           "side": "left",
-          "offset": 0.25
+          "offset": 0.2
         },
         {
           "id": "port-109",
           "name": "",
           "side": "left",
-          "offset": 0.5
+          "offset": 0.4
         },
         {
           "id": "port-110",
@@ -993,7 +1035,13 @@
           "id": "port-112",
           "name": "",
           "side": "left",
-          "offset": 0.75
+          "offset": 0.6
+        },
+        {
+          "id": "port-277",
+          "name": "",
+          "side": "left",
+          "offset": 0.8
         }
       ]
     },
@@ -1226,6 +1274,114 @@
         {
           "id": "port-214",
           "name": "load_data_o",
+          "side": "right",
+          "offset": 0.5
+        }
+      ]
+    },
+    {
+      "id": "mod-238",
+      "type": "reg",
+      "name": "CSR",
+      "x": 1360,
+      "y": 675,
+      "width": 200,
+      "height": 250,
+      "nameSize": 24,
+      "showType": false,
+      "fill": "",
+      "strokeColor": "#c77e00",
+      "strokeWidth": 3,
+      "muxInputs": 2,
+      "muxControlSide": "top",
+      "ports": [
+        {
+          "id": "port-239",
+          "name": "addr",
+          "side": "left",
+          "offset": 0.3
+        },
+        {
+          "id": "port-240",
+          "name": "wdata",
+          "side": "left",
+          "offset": 0.5
+        },
+        {
+          "id": "port-241",
+          "name": "rdata",
+          "side": "right",
+          "offset": 0.7
+        },
+        {
+          "id": "port-242",
+          "name": "CLK",
+          "side": "top",
+          "offset": 0.5
+        },
+        {
+          "id": "port-243",
+          "name": "we",
+          "side": "bottom",
+          "offset": 0.3
+        },
+        {
+          "id": "port-244",
+          "name": "csrop",
+          "side": "bottom",
+          "offset": 0.7
+        },
+        {
+          "id": "port-245",
+          "name": "exception_signal",
+          "side": "left",
+          "offset": 0.7
+        },
+        {
+          "id": "port-272",
+          "name": "flush",
+          "side": "right",
+          "offset": 0.3
+        }
+      ]
+    },
+    {
+      "id": "mod-252",
+      "type": "mux",
+      "name": "csr_src",
+      "x": 1158,
+      "y": 654,
+      "width": 80,
+      "height": 180,
+      "nameSize": 14,
+      "showType": false,
+      "fill": "",
+      "strokeColor": "#c77e00",
+      "strokeWidth": 3,
+      "muxInputs": 2,
+      "muxControlSide": "bottom",
+      "ports": [
+        {
+          "id": "port-257",
+          "name": "",
+          "side": "left",
+          "offset": 0.3333333333333333
+        },
+        {
+          "id": "port-258",
+          "name": "",
+          "side": "left",
+          "offset": 0.6666666666666666
+        },
+        {
+          "id": "port-259",
+          "name": "",
+          "side": "slopeBottom",
+          "offset": 0.55
+        },
+        {
+          "id": "port-260",
+          "name": "",
           "side": "right",
           "offset": 0.5
         }
@@ -1510,7 +1666,7 @@
       "label": "",
       "labelAt": "end",
       "route": "H",
-      "bend": 700,
+      "bend": 666,
       "bends": null,
       "color": "#00aaff",
       "width": 5,
@@ -1529,7 +1685,7 @@
       "label": "",
       "labelAt": "end",
       "route": "H",
-      "bend": 700,
+      "bend": 666,
       "bends": null,
       "color": "#00aaff",
       "width": 2.5,
@@ -1567,7 +1723,7 @@
       "label": "",
       "labelAt": "end",
       "route": "H",
-      "bend": 1221,
+      "bend": 1217,
       "bends": null,
       "color": "#00aaff",
       "width": 2.5,
@@ -1605,7 +1761,7 @@
       "label": "",
       "labelAt": "end",
       "route": "H",
-      "bend": 1273,
+      "bend": 1270,
       "bends": null,
       "color": "#263238",
       "width": 2.5,
@@ -1624,7 +1780,7 @@
       "label": "",
       "labelAt": "end",
       "route": "H",
-      "bend": 1263,
+      "bend": 1257,
       "bends": null,
       "color": "#263238",
       "width": 2.5,
@@ -1643,7 +1799,7 @@
       "label": "",
       "labelAt": "end",
       "route": "H",
-      "bend": 1162,
+      "bend": 1160,
       "bends": null,
       "color": "#263238",
       "width": 2.5,
@@ -1692,11 +1848,11 @@
           "y": 606
         },
         {
-          "x": 1714,
+          "x": 1731,
           "y": 606
         },
         {
-          "x": 1714,
+          "x": 1731,
           "y": 560
         }
       ],
@@ -1790,9 +1946,26 @@
       },
       "label": "[2:0]",
       "labelAt": "end",
-      "route": "V",
-      "bend": 121,
-      "bends": null,
+      "route": "H",
+      "bend": 1322,
+      "bends": [
+        {
+          "x": 1506,
+          "y": 120
+        },
+        {
+          "x": 1506,
+          "y": 359
+        },
+        {
+          "x": 1637,
+          "y": 359
+        },
+        {
+          "x": 1637,
+          "y": 373
+        }
+      ],
       "color": "#00aaff",
       "width": 2.5,
       "style": "solid"
@@ -1812,7 +1985,7 @@
       "route": "H",
       "bend": 1470,
       "bends": null,
-      "color": "#ffdd00",
+      "color": "#f0d000",
       "width": 2.5,
       "style": "solid"
     },
@@ -1831,7 +2004,7 @@
       "route": "H",
       "bend": 1470,
       "bends": null,
-      "color": "#ffdd00",
+      "color": "#f0d000",
       "width": 2.5,
       "style": "solid"
     },
@@ -1848,7 +2021,7 @@
       "label": "",
       "labelAt": "end",
       "route": "H",
-      "bend": 1108,
+      "bend": 1110,
       "bends": null,
       "color": "#263238",
       "width": 2.5,
@@ -1867,7 +2040,7 @@
       "label": "",
       "labelAt": "end",
       "route": "H",
-      "bend": 1086,
+      "bend": 1088,
       "bends": null,
       "color": "#263238",
       "width": 2.5,
@@ -1888,7 +2061,7 @@
       "route": "H",
       "bend": 1470,
       "bends": null,
-      "color": "#ffdd00",
+      "color": "#f0d000",
       "width": 2.5,
       "style": "solid"
     },
@@ -1924,7 +2097,7 @@
       "label": "",
       "labelAt": "end",
       "route": "H",
-      "bend": 1162,
+      "bend": 1160,
       "bends": null,
       "color": "#263238",
       "width": 2.5,
@@ -2129,19 +2302,19 @@
       "bends": [
         {
           "x": 1066,
-          "y": 480
+          "y": 450
         },
         {
           "x": 1066,
           "y": 574
         },
         {
-          "x": 1692,
+          "x": 1710,
           "y": 574
         },
         {
-          "x": 1692,
-          "y": 480
+          "x": 1710,
+          "y": 450
         }
       ],
       "color": "#263238",
@@ -2161,7 +2334,7 @@
       "label": "",
       "labelAt": "end",
       "route": "H",
-      "bend": 1663,
+      "bend": 1689,
       "bends": null,
       "color": "#263238",
       "width": 2.5,
@@ -2184,15 +2357,15 @@
       "bends": [
         {
           "x": 3032,
-          "y": 480
+          "y": 450
         },
         {
           "x": 3032,
-          "y": 1139
+          "y": 1442
         },
         {
           "x": 430,
-          "y": 1139
+          "y": 1442
         },
         {
           "x": 430,
@@ -2235,7 +2408,7 @@
       "label": "",
       "labelAt": "end",
       "route": "V",
-      "bend": 920,
+      "bend": 1190,
       "bends": null,
       "color": "#263238",
       "width": 2.5,
@@ -2254,7 +2427,7 @@
       "label": "",
       "labelAt": "end",
       "route": "V",
-      "bend": 880,
+      "bend": 1160,
       "bends": null,
       "color": "#263238",
       "width": 2.5,
@@ -2273,7 +2446,7 @@
       "label": "",
       "labelAt": "end",
       "route": "V",
-      "bend": 860,
+      "bend": 1130,
       "bends": null,
       "color": "#263238",
       "width": 2.5,
@@ -2292,7 +2465,7 @@
       "label": "",
       "labelAt": "end",
       "route": "V",
-      "bend": 840,
+      "bend": 1100,
       "bends": null,
       "color": "#00dba4",
       "width": 5,
@@ -2376,15 +2549,15 @@
         },
         {
           "x": 2081,
-          "y": 911
+          "y": 1160
         },
         {
           "x": 1971,
-          "y": 911
+          "y": 1160
         },
         {
           "x": 1971,
-          "y": 923
+          "y": 1160
         }
       ],
       "color": "#263238",
@@ -2412,15 +2585,15 @@
         },
         {
           "x": 2116,
-          "y": 931
+          "y": 1190
         },
         {
           "x": 2061,
-          "y": 931
+          "y": 1190
         },
         {
           "x": 2061,
-          "y": 945
+          "y": 1190
         }
       ],
       "color": "#263238",
@@ -2575,7 +2748,7 @@
       "route": "H",
       "bend": 2168,
       "bends": null,
-      "color": "#ffdd00",
+      "color": "#f0d000",
       "width": 2.5,
       "style": "solid"
     },
@@ -2615,19 +2788,19 @@
       "bends": [
         {
           "x": 2152,
-          "y": 480
+          "y": 450
         },
         {
           "x": 2152,
-          "y": 840
+          "y": 1100
         },
         {
           "x": 2604,
-          "y": 840
+          "y": 1100
         },
         {
           "x": 2604,
-          "y": 480
+          "y": 450
         }
       ],
       "color": "#263238",
@@ -2655,11 +2828,11 @@
         },
         {
           "x": 2081,
-          "y": 911
+          "y": 1160
         },
         {
           "x": 2653,
-          "y": 911
+          "y": 1160
         },
         {
           "x": 2653,
@@ -2691,11 +2864,11 @@
         },
         {
           "x": 2116,
-          "y": 876
+          "y": 1130
         },
         {
           "x": 2629,
-          "y": 876
+          "y": 1130
         },
         {
           "x": 2629,
@@ -2731,11 +2904,11 @@
         },
         {
           "x": 1774,
-          "y": 833
+          "y": 1190
         },
         {
           "x": 1871,
-          "y": 833
+          "y": 1190
         }
       ],
       "color": "#ff5cbb",
@@ -2776,7 +2949,7 @@
       "route": "H",
       "bend": 2953,
       "bends": null,
-      "color": "#ffdd00",
+      "color": "#f0d000",
       "width": 2.5,
       "style": "solid"
     },
@@ -2870,7 +3043,7 @@
       "bend": 3332,
       "bends": null,
       "color": "#00abb8",
-      "width": 2.5,
+      "width": 3,
       "style": "solid"
     },
     {
@@ -2894,11 +3067,11 @@
         },
         {
           "x": 3458,
-          "y": 1171
+          "y": 1486
         },
         {
           "x": 276,
-          "y": 1171
+          "y": 1486
         },
         {
           "x": 276,
@@ -2996,10 +3169,10 @@
       "label": "",
       "labelAt": "end",
       "route": "H",
-      "bend": 3529,
+      "bend": 3515,
       "bends": null,
       "color": "#00abb8",
-      "width": 2.5,
+      "width": 4,
       "style": "solid"
     },
     {
@@ -3018,7 +3191,7 @@
       "bend": 3249,
       "bends": null,
       "color": "#263238",
-      "width": 2.5,
+      "width": 4,
       "style": "solid"
     },
     {
@@ -3061,15 +3234,15 @@
         },
         {
           "x": 575,
-          "y": 1096
+          "y": 1369
         },
         {
-          "x": 1302,
-          "y": 1096
+          "x": 1301,
+          "y": 1369
         },
         {
-          "x": 1302,
-          "y": 1047
+          "x": 1301,
+          "y": 1369
         }
       ],
       "color": "#263238",
@@ -3097,15 +3270,15 @@
         },
         {
           "x": 596,
-          "y": 1118
+          "y": 1396
         },
         {
           "x": 1401,
-          "y": 1118
+          "y": 1396
         },
         {
           "x": 1401,
-          "y": 1062
+          "y": 1396
         }
       ],
       "color": "#263238",
@@ -3146,7 +3319,7 @@
       "route": "H",
       "bend": 2168,
       "bends": null,
-      "color": "#ffdd00",
+      "color": "#f0d000",
       "width": 2.5,
       "style": "solid"
     },
@@ -3182,7 +3355,7 @@
           "y": 304
         }
       ],
-      "color": "#ffdd00",
+      "color": "#f0d000",
       "width": 2.5,
       "style": "solid"
     },
@@ -3202,6 +3375,304 @@
       "bend": 2152,
       "bends": null,
       "color": "#263238",
+      "width": 2.5,
+      "style": "solid"
+    },
+    {
+      "id": "wire-249",
+      "from": {
+        "moduleId": "pr-id-ex",
+        "portId": "port-246"
+      },
+      "to": {
+        "moduleId": "mod-238",
+        "portId": "port-245"
+      },
+      "label": "",
+      "labelAt": "end",
+      "route": "H",
+      "bend": 1162,
+      "bends": null,
+      "color": "#263238",
+      "width": 2.5,
+      "style": "solid"
+    },
+    {
+      "id": "wire-261",
+      "from": {
+        "moduleId": "mod-252",
+        "portId": "port-260"
+      },
+      "to": {
+        "moduleId": "mod-238",
+        "portId": "port-240"
+      },
+      "label": "",
+      "labelAt": "end",
+      "route": "H",
+      "bend": 1267,
+      "bends": null,
+      "color": "#263238",
+      "width": 2.5,
+      "style": "solid"
+    },
+    {
+      "id": "wire-262",
+      "from": {
+        "moduleId": "mod-238",
+        "portId": "port-239"
+      },
+      "to": {
+        "moduleId": "pr-id-ex",
+        "portId": "port-248"
+      },
+      "label": "",
+      "labelAt": "end",
+      "route": "H",
+      "bend": 1168,
+      "bends": [
+        {
+          "x": 1290,
+          "y": 750
+        },
+        {
+          "x": 1290,
+          "y": 877
+        },
+        {
+          "x": 1088,
+          "y": 877
+        },
+        {
+          "x": 1088,
+          "y": 750
+        }
+      ],
+      "color": "#263238",
+      "width": 2.5,
+      "style": "solid"
+    },
+    {
+      "id": "wire-263",
+      "from": {
+        "moduleId": "pr-id-ex",
+        "portId": "pr-id-ex-imm_ex_o"
+      },
+      "to": {
+        "moduleId": "mod-252",
+        "portId": "port-257"
+      },
+      "label": "",
+      "labelAt": "end",
+      "route": "H",
+      "bend": 1088,
+      "bends": null,
+      "color": "#263238",
+      "width": 2.5,
+      "style": "solid"
+    },
+    {
+      "id": "wire-264",
+      "from": {
+        "moduleId": "pr-id-ex",
+        "portId": "pr-id-ex-rD1_o"
+      },
+      "to": {
+        "moduleId": "mod-252",
+        "portId": "port-258"
+      },
+      "label": "",
+      "labelAt": "end",
+      "route": "H",
+      "bend": 1134,
+      "bends": null,
+      "color": "#263238",
+      "width": 2.5,
+      "style": "solid"
+    },
+    {
+      "id": "wire-266",
+      "from": {
+        "moduleId": "pr-id-ex",
+        "portId": "port-265"
+      },
+      "to": {
+        "moduleId": "mod-238",
+        "portId": "port-244"
+      },
+      "label": "",
+      "labelAt": "end",
+      "route": "H",
+      "bend": 1500,
+      "bends": null,
+      "color": "#c29c0f",
+      "width": 5,
+      "style": "solid"
+    },
+    {
+      "id": "wire-267",
+      "from": {
+        "moduleId": "mod-238",
+        "portId": "port-243"
+      },
+      "to": {
+        "moduleId": "pr-id-ex",
+        "portId": "port-265"
+      },
+      "label": "",
+      "labelAt": "end",
+      "route": "H",
+      "bend": 1420,
+      "bends": null,
+      "color": "#c29c0f",
+      "width": 5,
+      "style": "solid"
+    },
+    {
+      "id": "wire-268",
+      "from": {
+        "moduleId": "mod-252",
+        "portId": "port-259"
+      },
+      "to": {
+        "moduleId": "pr-id-ex",
+        "portId": "port-265"
+      },
+      "label": "",
+      "labelAt": "end",
+      "route": "H",
+      "bend": 1202,
+      "bends": null,
+      "color": "#c29c0f",
+      "width": 2.5,
+      "style": "solid"
+    },
+    {
+      "id": "wire-269",
+      "from": {
+        "moduleId": "mod-23",
+        "portId": "port-26"
+      },
+      "to": {
+        "moduleId": "pr-id-ex",
+        "portId": "port-247"
+      },
+      "label": "",
+      "labelAt": "end",
+      "route": "H",
+      "bend": 666,
+      "bends": null,
+      "color": "#00aaff",
+      "width": 2.5,
+      "style": "solid"
+    },
+    {
+      "id": "wire-271",
+      "from": {
+        "moduleId": "mod-23",
+        "portId": "port-26"
+      },
+      "to": {
+        "moduleId": "pr-id-ex",
+        "portId": "port-270"
+      },
+      "label": "",
+      "labelAt": "end",
+      "route": "H",
+      "bend": 666,
+      "bends": null,
+      "color": "#00aaff",
+      "width": 5,
+      "style": "solid"
+    },
+    {
+      "id": "wire-275",
+      "from": {
+        "moduleId": "mod-238",
+        "portId": "port-272"
+      },
+      "to": {
+        "moduleId": "pr-mem-wb",
+        "portId": "port-274"
+      },
+      "label": "",
+      "labelAt": "end",
+      "route": "H",
+      "bend": 1587,
+      "bends": [
+        {
+          "x": 1694,
+          "y": 750
+        },
+        {
+          "x": 1694,
+          "y": 1040
+        },
+        {
+          "x": 2796,
+          "y": 1040
+        },
+        {
+          "x": 2796,
+          "y": 999
+        }
+      ],
+      "color": "#263238",
+      "width": 2.5,
+      "style": "solid"
+    },
+    {
+      "id": "wire-276",
+      "from": {
+        "moduleId": "mod-238",
+        "portId": "port-272"
+      },
+      "to": {
+        "moduleId": "pr-ex-mem",
+        "portId": "port-273"
+      },
+      "label": "",
+      "labelAt": "end",
+      "route": "H",
+      "bend": 1721,
+      "bends": [
+        {
+          "x": 1694,
+          "y": 750
+        },
+        {
+          "x": 1694,
+          "y": 1040
+        },
+        {
+          "x": 1930,
+          "y": 1040
+        },
+        {
+          "x": 1930,
+          "y": 999
+        }
+      ],
+      "color": "#263238",
+      "width": 2.5,
+      "style": "solid"
+    },
+    {
+      "id": "wire-278",
+      "from": {
+        "moduleId": "mod-238",
+        "portId": "port-241"
+      },
+      "to": {
+        "moduleId": "mod-107",
+        "portId": "port-277"
+      },
+      "label": "",
+      "labelAt": "end",
+      "route": "H",
+      "bend": 1583,
+      "bends": null,
+      "color": "#c29c0f",
       "width": 2.5,
       "style": "solid"
     }

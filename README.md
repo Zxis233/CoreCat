@@ -25,14 +25,7 @@
 </p>
 
 
-CoreCat 是一个轻量的浏览器端模块/连线绘制工具，用于快速绘制模块级电路图，支持可视化编辑模块、端口、连线，并导入导出。
-
-## 示例
-
- - 源代码：[Escute-RV](https://github.com/Zxis233/EsCute-RV/tree/Zmmul)
- - JSON格式：[rscuterv.json](examples/escuterv.json)
-
-![EsCute-RV 架构图](svg/escute.svg)
+CoreCat 是一个轻量的网页端模块级电路图绘制工具，支持可视化编辑模块、端口、连线等功能。
 
 ## 主要功能
  - [x] 模块拖拽与自定义颜色
@@ -41,3 +34,10 @@ CoreCat 是一个轻量的浏览器端模块/连线绘制工具，用于快速�
  - [x] 导入与导出（JSON/SVG/PNG）
  - [x] 常用快捷键（复制粘贴/撤销重做/垂直拖动）
  - [x] 彩蛋 
+
+## 示例
+
+ - 源代码：[Escute-RV](https://github.com/Zxis233/EsCute-RV/tree/CSR)
+ - JSON格式：[rscuterv.json](examples/escuterv.json)
+
+![EsCute-RV 架构图](svg/escute.svg)

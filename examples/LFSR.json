@@ -1,0 +1,413 @@
+{
+  "canvasBackground": "#ffffff",
+  "modules": [
+    {
+      "id": "mod-6",
+      "type": "seq",
+      "name": "D1",
+      "x": 300,
+      "y": 200,
+      "width": 100,
+      "height": 100,
+      "nameSize": 20,
+      "showType": false,
+      "fill": "",
+      "strokeColor": "",
+      "strokeWidth": 3,
+      "muxInputs": 2,
+      "muxControlSide": "top",
+      "ports": [
+        {
+          "id": "port-7",
+          "name": "D",
+          "side": "left",
+          "offset": 0.35
+        },
+        {
+          "id": "port-9",
+          "name": "Q",
+          "side": "right",
+          "offset": 0.65
+        },
+        {
+          "id": "port-10",
+          "name": "CLK",
+          "side": "top",
+          "offset": 0.5
+        }
+      ]
+    },
+    {
+      "id": "mod-11",
+      "type": "seq",
+      "name": "D2",
+      "x": 700,
+      "y": 200,
+      "width": 100,
+      "height": 100,
+      "nameSize": 20,
+      "showType": false,
+      "fill": "",
+      "strokeColor": "",
+      "strokeWidth": 3,
+      "muxInputs": 2,
+      "muxControlSide": "top",
+      "ports": [
+        {
+          "id": "port-12",
+          "name": "D",
+          "side": "left",
+          "offset": 0.35
+        },
+        {
+          "id": "port-13",
+          "name": "Q",
+          "side": "right",
+          "offset": 0.65
+        },
+        {
+          "id": "port-14",
+          "name": "CLK",
+          "side": "top",
+          "offset": 0.5
+        }
+      ]
+    },
+    {
+      "id": "mod-15",
+      "type": "seq",
+      "name": "D3",
+      "x": 500,
+      "y": 200,
+      "width": 100,
+      "height": 100,
+      "nameSize": 20,
+      "showType": false,
+      "fill": "",
+      "strokeColor": "",
+      "strokeWidth": 3,
+      "muxInputs": 2,
+      "muxControlSide": "top",
+      "ports": [
+        {
+          "id": "port-16",
+          "name": "D",
+          "side": "left",
+          "offset": 0.35
+        },
+        {
+          "id": "port-17",
+          "name": "Q",
+          "side": "right",
+          "offset": 0.65
+        },
+        {
+          "id": "port-18",
+          "name": "CLK",
+          "side": "top",
+          "offset": 0.5
+        }
+      ]
+    },
+    {
+      "id": "mod-19",
+      "type": "seq",
+      "name": "D4",
+      "x": 900,
+      "y": 200,
+      "width": 100,
+      "height": 100,
+      "nameSize": 20,
+      "showType": false,
+      "fill": "",
+      "strokeColor": "",
+      "strokeWidth": 3,
+      "muxInputs": 2,
+      "muxControlSide": "top",
+      "ports": [
+        {
+          "id": "port-20",
+          "name": "D",
+          "side": "left",
+          "offset": 0.35
+        },
+        {
+          "id": "port-21",
+          "name": "Q",
+          "side": "right",
+          "offset": 0.65
+        },
+        {
+          "id": "port-22",
+          "name": "CLK",
+          "side": "top",
+          "offset": 0.5
+        }
+      ]
+    },
+    {
+      "id": "mod-26",
+      "type": "seq",
+      "name": "CLK GEN",
+      "x": 140,
+      "y": 83,
+      "width": 150,
+      "height": 90,
+      "nameSize": 14,
+      "showType": false,
+      "fill": "",
+      "strokeColor": "",
+      "strokeWidth": 3,
+      "muxInputs": 2,
+      "muxControlSide": "top",
+      "ports": [
+        {
+          "id": "port-27",
+          "name": "clk",
+          "side": "top",
+          "offset": 0.5
+        },
+        {
+          "id": "port-28",
+          "name": "Freq",
+          "side": "left",
+          "offset": 0.3
+        },
+        {
+          "id": "port-29",
+          "name": "Clk_Out",
+          "side": "right",
+          "offset": 0.7
+        }
+      ]
+    },
+    {
+      "id": "mod-34",
+      "type": "combo",
+      "name": "XOR",
+      "x": 645,
+      "y": 363,
+      "width": 150,
+      "height": 90,
+      "nameSize": 14,
+      "showType": false,
+      "fill": "",
+      "strokeColor": "",
+      "strokeWidth": 3,
+      "muxInputs": 2,
+      "muxControlSide": "top",
+      "ports": [
+        {
+          "id": "port-35",
+          "name": "A",
+          "side": "right",
+          "offset": 0.3
+        },
+        {
+          "id": "port-36",
+          "name": "B",
+          "side": "right",
+          "offset": 0.7
+        },
+        {
+          "id": "port-37",
+          "name": "Out",
+          "side": "left",
+          "offset": 0.5
+        }
+      ]
+    }
+  ],
+  "wires": [
+    {
+      "id": "wire-23",
+      "from": {
+        "moduleId": "mod-6",
+        "portId": "port-9"
+      },
+      "to": {
+        "moduleId": "mod-15",
+        "portId": "port-16"
+      },
+      "label": "Q1",
+      "labelAt": "start",
+      "route": "H",
+      "bend": 450,
+      "bends": null,
+      "color": "#263238",
+      "width": 2.5,
+      "style": "solid"
+    },
+    {
+      "id": "wire-24",
+      "from": {
+        "moduleId": "mod-15",
+        "portId": "port-17"
+      },
+      "to": {
+        "moduleId": "mod-11",
+        "portId": "port-12"
+      },
+      "label": "Q2",
+      "labelAt": "start",
+      "route": "H",
+      "bend": 650,
+      "bends": null,
+      "color": "#263238",
+      "width": 2.5,
+      "style": "solid"
+    },
+    {
+      "id": "wire-25",
+      "from": {
+        "moduleId": "mod-11",
+        "portId": "port-13"
+      },
+      "to": {
+        "moduleId": "mod-19",
+        "portId": "port-20"
+      },
+      "label": "Q3",
+      "labelAt": "start",
+      "route": "H",
+      "bend": 850,
+      "bends": null,
+      "color": "#263238",
+      "width": 2.5,
+      "style": "solid"
+    },
+    {
+      "id": "wire-30",
+      "from": {
+        "moduleId": "mod-26",
+        "portId": "port-29"
+      },
+      "to": {
+        "moduleId": "mod-6",
+        "portId": "port-10"
+      },
+      "label": "",
+      "labelAt": "end",
+      "route": "H",
+      "bend": 350,
+      "bends": null,
+      "color": "#263238",
+      "width": 2.5,
+      "style": "solid"
+    },
+    {
+      "id": "wire-31",
+      "from": {
+        "moduleId": "mod-26",
+        "portId": "port-29"
+      },
+      "to": {
+        "moduleId": "mod-15",
+        "portId": "port-18"
+      },
+      "label": "",
+      "labelAt": "end",
+      "route": "H",
+      "bend": 550,
+      "bends": null,
+      "color": "#263238",
+      "width": 2.5,
+      "style": "solid"
+    },
+    {
+      "id": "wire-32",
+      "from": {
+        "moduleId": "mod-26",
+        "portId": "port-29"
+      },
+      "to": {
+        "moduleId": "mod-11",
+        "portId": "port-14"
+      },
+      "label": "",
+      "labelAt": "end",
+      "route": "H",
+      "bend": 750,
+      "bends": null,
+      "color": "#263238",
+      "width": 2.5,
+      "style": "solid"
+    },
+    {
+      "id": "wire-33",
+      "from": {
+        "moduleId": "mod-26",
+        "portId": "port-29"
+      },
+      "to": {
+        "moduleId": "mod-19",
+        "portId": "port-22"
+      },
+      "label": "",
+      "labelAt": "end",
+      "route": "H",
+      "bend": 950,
+      "bends": null,
+      "color": "#263238",
+      "width": 2.5,
+      "style": "solid"
+    },
+    {
+      "id": "wire-38",
+      "from": {
+        "moduleId": "mod-11",
+        "portId": "port-13"
+      },
+      "to": {
+        "moduleId": "mod-34",
+        "portId": "port-35"
+      },
+      "label": "",
+      "labelAt": "end",
+      "route": "H",
+      "bend": 850,
+      "bends": null,
+      "color": "#263238",
+      "width": 2.5,
+      "style": "solid"
+    },
+    {
+      "id": "wire-39",
+      "from": {
+        "moduleId": "mod-19",
+        "portId": "port-21"
+      },
+      "to": {
+        "moduleId": "mod-34",
+        "portId": "port-36"
+      },
+      "label": "Q4",
+      "labelAt": "start",
+      "route": "H",
+      "bend": 1043,
+      "bends": null,
+      "color": "#263238",
+      "width": 2.5,
+      "style": "solid"
+    },
+    {
+      "id": "wire-40",
+      "from": {
+        "moduleId": "mod-34",
+        "portId": "port-37"
+      },
+      "to": {
+        "moduleId": "mod-6",
+        "portId": "port-7"
+      },
+      "label": "",
+      "labelAt": "end",
+      "route": "H",
+      "bend": 211,
+      "bends": null,
+      "color": "#263238",
+      "width": 2.5,
+      "style": "solid"
+    }
+  ]
+}

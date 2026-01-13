@@ -108,7 +108,7 @@
   -webkit-mask-size: contain;
   mask-size: contain;
   pointer-events: none;
-  transform: translate(calc(-50% - 2px), 0);
+  transform: translate(calc(-50% - 2.5px), 0);
   z-index: 1;
 }
 

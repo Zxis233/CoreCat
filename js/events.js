@@ -661,7 +661,16 @@ export function initButtons() {
   const exportPngButton = document.getElementById("btn-export-png");
   const exportSvgButton = document.getElementById("btn-export-svg");
   const bgToggleButton = document.getElementById("btn-bg-toggle");
+  const demoEscutervButton = document.getElementById("btn-demo-escuterv");
+  const demoLfsrButton = document.getElementById("btn-demo-lfsr");
   let modalMode = "export";
+
+  const diagramCallbacks = {
+    renderModules: doRenderModules,
+    updateWires: doUpdateWires,
+    renderProperties: doRenderProperties,
+    updateStatus: updateStatus,
+  };
 
   const openModal = (mode) => {
     modalMode = mode;
@@ -691,6 +700,21 @@ export function initButtons() {
     modal.classList.add("hidden");
   };
 
+  const loadDemo = async (path) => {
+    try {
+      const response = await fetch(path);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch demo: ${path}`);
+      }
+      const data = await response.json();
+      loadState(data, diagramCallbacks);
+      recordHistory();
+      scheduleAutoSave();
+    } catch (err) {
+      alert("Failed to load demo.");
+    }
+  };
+
   document.getElementById("btn-export").addEventListener("click", () => openModal("export"));
   document.getElementById("btn-import").addEventListener("click", () => openModal("import"));
   if (importModuleButton) {
@@ -708,12 +732,7 @@ export function initButtons() {
     if (modalMode === "import") {
       try {
         const data = JSON.parse(modalText.value);
-        loadState(data, {
-          renderModules: doRenderModules,
-          updateWires: doUpdateWires,
-          renderProperties: doRenderProperties,
-          updateStatus: updateStatus,
-        });
+        loadState(data, diagramCallbacks);
         recordHistory();
         scheduleAutoSave();
         closeModal();
@@ -745,6 +764,18 @@ export function initButtons() {
   //     return;
   //   }
   // });
+
+  if (demoEscutervButton) {
+    demoEscutervButton.addEventListener("click", () => {
+      loadDemo("examples/escuterv.json");
+    });
+  }
+
+  if (demoLfsrButton) {
+    demoLfsrButton.addEventListener("click", () => {
+      loadDemo("examples/LFSR.json");
+    });
+  }
 
   document.getElementById("btn-clear").addEventListener("click", () => {
     if (!confirm("Clear the canvas?")) {
