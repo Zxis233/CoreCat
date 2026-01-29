@@ -5,7 +5,7 @@
 
 import { state, canvas, moduleLayer, wireLayer, moduleElements, statusEl } from './state.js';
 import { MODULE_LIBRARY, DEFAULT_MODULE, MUX_DEFAULT } from './constants.js';
-import { getCanvasPoint, getModuleById, applyCanvasBackground, clamp, isTypingTarget, uid, ensureMuxGeometry } from './utils.js';
+import { getCanvasPoint, getModuleById, applyCanvasBackground, applyPortLabelSize, clamp, isTypingTarget, uid, ensureMuxGeometry } from './utils.js';
 import { createModule, renderModules, ensureMuxPorts } from './module.js';
 import { createWire, updateWires, syncSvgSize } from './wire.js';
 import { renderProperties } from './properties.js';
@@ -976,5 +976,6 @@ export function initApp() {
     doRenderProperties();
     updateStatus();
   }
+  applyPortLabelSize();
   initHistory();
 }

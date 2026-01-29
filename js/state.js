@@ -3,6 +3,8 @@
  * 包含全局状态对象和DOM元素引用
  */
 
+import { DEFAULT_PORT_LABEL_SIZE } from './constants.js';
+
 export const state = {
   modules: [],
   wires: [],
@@ -14,6 +16,7 @@ export const state = {
   nextId: 1,
   typeCounts: {},
   canvasBackground: "",
+  portLabelSize: DEFAULT_PORT_LABEL_SIZE,
   view: {
     scale: 1,
     offsetX: 0,

@@ -99,6 +99,8 @@ export const DEFAULT_WIRE = {
 export const WIRE_MARGIN = 20;
 
 export const DEFAULT_CANVAS_BG = "#f6f1e8";
+export const DEFAULT_PORT_LABEL_SIZE = 14;
+export const PORT_LABEL_SIZE_RANGE = { min: 8, max: 32 };
 
 export const HISTORY_MAX_STEPS = 5;
 

@@ -4,8 +4,27 @@
  */
 
 import { state, canvas } from './state.js';
-import { MODULE_LIBRARY, DEFAULT_MODULE, DEFAULT_WIRE, WIRE_STYLES, DEFAULT_CANVAS_BG, MUX_DEFAULT } from './constants.js';
-import { escapeXml, getMuxCut, getExtenderOffset, getCanvasBackgroundColor, applyCanvasBackground, ensureMuxGeometry, getModuleGradientFill, parseRgb } from './utils.js';
+import {
+  MODULE_LIBRARY,
+  DEFAULT_MODULE,
+  DEFAULT_WIRE,
+  WIRE_STYLES,
+  DEFAULT_CANVAS_BG,
+  MUX_DEFAULT,
+  DEFAULT_PORT_LABEL_SIZE,
+  PORT_LABEL_SIZE_RANGE
+} from './constants.js';
+import {
+  escapeXml,
+  getMuxCut,
+  getExtenderOffset,
+  getCanvasBackgroundColor,
+  applyCanvasBackground,
+  applyPortLabelSize,
+  ensureMuxGeometry,
+  getModuleGradientFill,
+  parseRgb
+} from './utils.js';
 import { getPortLocalPosition, getPortPositionByRef } from './port.js';
 import {
   buildWirePath,
@@ -34,9 +53,15 @@ const DEFAULT_STROKE_COLOR = "rgba(31, 38, 43, 0.18)";
 const STORAGE_KEY = "corecat-diagram";
 const AUTO_SAVE_DELAY = 250;
 let autoSaveTimer = null;
-const PORT_LABEL_FONT_SIZE = 14;
-const PORT_LABEL_HALF_HEIGHT = PORT_LABEL_FONT_SIZE / 2;
 const PORT_COLOR_MIX_RATIO = 0.5;
+
+function resolvePortLabelSize() {
+  const range = PORT_LABEL_SIZE_RANGE || { min: 8, max: 32 };
+  const min = Number.isFinite(range.min) ? range.min : 8;
+  const max = Number.isFinite(range.max) ? range.max : 32;
+  const raw = Number.isFinite(state.portLabelSize) ? state.portLabelSize : DEFAULT_PORT_LABEL_SIZE;
+  return Math.max(min, Math.min(max, Math.round(raw)));
+}
 
 /**
  * 保存至本地存储
@@ -140,7 +165,7 @@ function resolvePortFillColor(strokeColor) {
   return fallback || "#1d262b";
 }
 
-function getPortLabelPlacement(mod, portSide) {
+function getPortLabelPlacement(mod, portSide, labelHalfHeight) {
   const isOffsetPort = mod.type === "extender" || mod.type === "mux";
   const leftOffset = isOffsetPort ? 7 : 6;
   const rightOffset = isOffsetPort ? -8 : -10;
@@ -150,13 +175,13 @@ function getPortLabelPlacement(mod, portSide) {
     case "right":
       return { dx: rightOffset, dy: -2, anchor: "end" };
     case "top":
-      return { dx: -2, dy: 3 + PORT_LABEL_HALF_HEIGHT, anchor: "middle" };
+      return { dx: -2, dy: 3 + labelHalfHeight, anchor: "middle" };
     case "bottom":
-      return { dx: -2, dy: -(10 + PORT_LABEL_HALF_HEIGHT), anchor: "middle" };
+      return { dx: -2, dy: -(10 + labelHalfHeight), anchor: "middle" };
     case "slopeTop":
-      return { dx: -1, dy: 6 + PORT_LABEL_HALF_HEIGHT, anchor: "middle" };
+      return { dx: -1, dy: 6 + labelHalfHeight, anchor: "middle" };
     case "slopeBottom":
-      return { dx: 1, dy: -(6 + PORT_LABEL_HALF_HEIGHT), anchor: "middle" };
+      return { dx: 1, dy: -(6 + labelHalfHeight), anchor: "middle" };
     default:
       return { dx: 0, dy: 0, anchor: "middle" };
   }
@@ -241,6 +266,8 @@ export function buildExportSvg(options) {
   const offsetX = bounds ? -bounds.minX + padding : state.view.offsetX;
   const offsetY = bounds ? -bounds.minY + padding : state.view.offsetY;
   const scale = bounds ? 1 : state.view.scale;
+  const portLabelFontSize = resolvePortLabelSize();
+  const portLabelHalfHeight = portLabelFontSize / 2;
   const parts = [];
   parts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`);
   parts.push(
@@ -250,7 +277,7 @@ export function buildExportSvg(options) {
     ".wire-bend.overlap{stroke-width:2;opacity:1;}",
     ".module-name{font-family:MiSans VF,Noto Sans SC,Trebuchet MS,Lucida Sans Unicode,Lucida Grande,sans-serif;font-weight:700;fill:#1d262b;}",
     ".module-type{font-family:MiSans VF,Noto Sans SC,Trebuchet MS,Lucida Sans Unicode,Lucida Grande,sans-serif;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;fill:#6b6f6f;}",
-    ".port-label{font-family:Maple Mono Normal NF CN,Maple Mono NF CN,Consolas,Courier New,monospace;font-size:14px;fill:#1d262b;}",
+    `.port-label{font-family:Maple Mono Normal NF CN,Maple Mono NF CN,Consolas,Courier New,monospace;font-size:${portLabelFontSize}px;fill:#1d262b;}`,
     ".wire-label{font-family:Maple Mono Normal NF CN,Maple Mono NF CN,Consolas,Courier New,monospace;font-size:11px;}",
     "</style>"
   );
@@ -448,7 +475,7 @@ export function buildExportSvg(options) {
       if (isClockPort(port)) {
         const markerWidth = 24;
         const markerHeight = 12;
-        const markerX = local.x - markerWidth / 2 + 1;
+        const markerX = local.x - markerWidth / 2;
         const markerY = port.side === "bottom" ? local.y - markerHeight + 1 : local.y - 1;
         const markerPath = buildClockMarkerPath(markerX, markerY, markerWidth, markerHeight, port.side !== "bottom");
         parts.push(
@@ -457,7 +484,7 @@ export function buildExportSvg(options) {
         return;
       }
       parts.push(`<circle cx="${local.x + portOffset}" cy="${local.y + portOffset}" r="6" fill="${portFill}"></circle>`);
-      const placement = getPortLabelPlacement(mod, port.side);
+      const placement = getPortLabelPlacement(mod, port.side, portLabelHalfHeight);
       const labelX = local.x + placement.dx + 2.5;
       const labelY = local.y + placement.dy + 2.5;
       const anchor = placement.anchor;
@@ -545,6 +572,7 @@ export function exportPng() {
 export function serializeState() {
   return {
     canvasBackground: state.canvasBackground,
+    portLabelSize: state.portLabelSize,
     modules: state.modules.map((mod) => ({
       id: mod.id,
       type: mod.type,
@@ -612,6 +640,8 @@ export function loadState(data, callbacks) {
   }
   state.canvasBackground = typeof data.canvasBackground === "string" ? data.canvasBackground : "";
   applyCanvasBackground();
+  state.portLabelSize = Number.isFinite(data.portLabelSize) ? data.portLabelSize : DEFAULT_PORT_LABEL_SIZE;
+  applyPortLabelSize();
   state.modules = data.modules.map((mod) => {
     const nameSize = Number.isFinite(mod.nameSize) ? mod.nameSize : DEFAULT_MODULE.nameSize;
     const showType = mod.showType !== false;

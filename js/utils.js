@@ -4,7 +4,14 @@
  */
 
 import { state, canvas } from './state.js';
-import { NS, MUX_DEFAULT, EXTENDER_DEFAULT, DEFAULT_CANVAS_BG } from './constants.js';
+import {
+  NS,
+  MUX_DEFAULT,
+  EXTENDER_DEFAULT,
+  DEFAULT_CANVAS_BG,
+  DEFAULT_PORT_LABEL_SIZE,
+  PORT_LABEL_SIZE_RANGE
+} from './constants.js';
 
 /**
  * 将值限制在指定范围内
@@ -132,6 +139,19 @@ export function applyCanvasBackground() {
   } else {
     canvas.style.background = "";
   }
+}
+
+/**
+ * 应用端口标签字体大小
+ */
+export function applyPortLabelSize() {
+  const range = PORT_LABEL_SIZE_RANGE || { min: 8, max: 32 };
+  const min = Number.isFinite(range.min) ? range.min : 8;
+  const max = Number.isFinite(range.max) ? range.max : 32;
+  const raw = Number.isFinite(state.portLabelSize) ? state.portLabelSize : DEFAULT_PORT_LABEL_SIZE;
+  const size = clamp(Math.round(raw), min, max);
+  state.portLabelSize = size;
+  canvas.style.setProperty("--port-label-size", `${size}px`);
 }
 
 /**

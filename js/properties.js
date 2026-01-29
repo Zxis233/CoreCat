@@ -4,8 +4,17 @@
  */
 
 import { state, propertiesContent } from './state.js';
-import { MODULE_LIBRARY, DEFAULT_MODULE, DEFAULT_WIRE, MUX_DEFAULT, WIRE_STYLES, DEFAULT_CANVAS_BG } from './constants.js';
-import { uid, clamp, getModuleById, applyCanvasBackground, ensureMuxGeometry } from './utils.js';
+import {
+  MODULE_LIBRARY,
+  DEFAULT_MODULE,
+  DEFAULT_WIRE,
+  MUX_DEFAULT,
+  WIRE_STYLES,
+  DEFAULT_CANVAS_BG,
+  DEFAULT_PORT_LABEL_SIZE,
+  PORT_LABEL_SIZE_RANGE
+} from './constants.js';
+import { uid, clamp, getModuleById, applyCanvasBackground, applyPortLabelSize, ensureMuxGeometry } from './utils.js';
 import { scheduleAutoSave } from './export.js';
 import { setWireDefaultBend, setWireSmartBends } from './wire.js';
 import { ensureMuxPorts } from './module.js';
@@ -141,6 +150,23 @@ function renderCanvasProperties(renderPropertiesCallback) {
     })
   );
   propertiesContent.appendChild(resetRow);
+
+
+  const portLabelMin = PORT_LABEL_SIZE_RANGE ? PORT_LABEL_SIZE_RANGE.min : 8;
+  const portLabelMax = PORT_LABEL_SIZE_RANGE ? PORT_LABEL_SIZE_RANGE.max : 32;
+  const portLabelInput = makeNumberInput(
+    Number.isFinite(state.portLabelSize) ? state.portLabelSize : DEFAULT_PORT_LABEL_SIZE,
+    { min: portLabelMin, max: portLabelMax, step: 1 },
+    (value) => {
+      const next = clamp(Math.round(value), portLabelMin, portLabelMax);
+      state.portLabelSize = next;
+      portLabelInput.value = next;
+      applyPortLabelSize();
+      recordHistory();
+      scheduleAutoSave();
+    }
+  );
+  propertiesContent.appendChild(makeField("Port Label Size", portLabelInput));
 }
 
 /**
