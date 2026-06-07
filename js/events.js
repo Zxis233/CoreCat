@@ -707,7 +707,9 @@ export function initButtons() {
         throw new Error(`Failed to fetch demo: ${path}`);
       }
       const data = await response.json();
-      loadState(data, diagramCallbacks);
+      if (!loadState(data, diagramCallbacks)) {
+        throw new Error(`Invalid demo data: ${path}`);
+      }
       recordHistory();
       scheduleAutoSave();
     } catch (err) {
@@ -732,7 +734,9 @@ export function initButtons() {
     if (modalMode === "import") {
       try {
         const data = JSON.parse(modalText.value);
-        loadState(data, diagramCallbacks);
+        if (!loadState(data, diagramCallbacks)) {
+          return;
+        }
         recordHistory();
         scheduleAutoSave();
         closeModal();

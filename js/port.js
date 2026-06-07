@@ -54,6 +54,9 @@ export function getPortPosition(mod, port) {
  * 通过引用获取端口位置
  */
 export function getPortPositionByRef(ref) {
+  if (!ref || typeof ref !== "object") {
+    return null;
+  }
   const mod = getModuleById(ref.moduleId);
   if (!mod) {
     return null;
@@ -69,6 +72,9 @@ export function getPortPositionByRef(ref) {
  * 描述端口引用
  */
 export function describePortRef(ref) {
+  if (!ref || typeof ref !== "object") {
+    return "Unknown";
+  }
   const mod = getModuleById(ref.moduleId);
   if (!mod) {
     return "Unknown";

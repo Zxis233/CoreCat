@@ -102,6 +102,63 @@ export function escapeXml(value) {
   return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&apos;");
 }
 
+function normalizeSvgPaintKeyword(value) {
+  const lower = value.toLowerCase();
+  if (lower === "none") {
+    return "none";
+  }
+  if (lower === "transparent") {
+    return "transparent";
+  }
+  if (lower === "currentcolor") {
+    return "currentColor";
+  }
+  return null;
+}
+
+/**
+ * 仅允许导出 SVG 属性中安全的 paint 值。
+ */
+function normalizeSvgPaintValue(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  const color = value.trim();
+  if (!color || color.length > 128 || /[\u0000-\u001f\u007f<>"'`\\]/.test(color)) {
+    return "";
+  }
+
+  const keyword = normalizeSvgPaintKeyword(color);
+  if (keyword) {
+    return keyword;
+  }
+
+  if (/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(color)) {
+    return color;
+  }
+
+  const rgbMatch = /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*([+-]?(?:\d+|\d*\.\d+)))?\s*\)$/i.exec(color);
+  if (!rgbMatch) {
+    return "";
+  }
+  const channels = rgbMatch.slice(1, 4).map((part) => Number.parseInt(part, 10));
+  if (channels.some((channel) => channel < 0 || channel > 255)) {
+    return "";
+  }
+  if (rgbMatch[4] !== undefined) {
+    const alpha = Number.parseFloat(rgbMatch[4]);
+    if (!Number.isFinite(alpha) || alpha < 0 || alpha > 1) {
+      return "";
+    }
+  }
+  return color;
+}
+
+export function sanitizeSvgPaint(value, fallback = "") {
+  return normalizeSvgPaintValue(value) || normalizeSvgPaintValue(fallback);
+}
+
 /**
  * 创建SVG元素
  */
@@ -260,15 +317,17 @@ export function parseRgb(color, includeAlpha = false) {
  * 与CSS中 color-mix 渐变一致，根据模块类型的 stroke 颜色生成渐变
  */
 export function getModuleGradientFill(mod, strokeColor, gradientId = "moduleGradient") {
-  const hasFill = typeof mod.fill === "string" && mod.fill !== "";
+  const safeFill = sanitizeSvgPaint(mod.fill, "");
+  const safeStrokeColor = sanitizeSvgPaint(strokeColor, "#1d262b");
+  const hasFill = safeFill !== "";
   const useGradient = !hasFill;
-  const fillAttr = useGradient ? `url(#${gradientId})` : mod.fill;
+  const fillAttr = useGradient ? `url(#${gradientId})` : safeFill;
 
   // 根据 stroke 颜色生成渐变，模拟 CSS color-mix(in srgb, strokeColor 16%, white) 和 color-mix(in srgb, strokeColor 8%, white)
   // 使用 stroke 颜色的淡色版本作为渐变
   let gradientDef = "";
   if (useGradient) {
-    const rgb = parseRgb(strokeColor);
+    const rgb = parseRgb(safeStrokeColor);
     if (rgb) {
       // 16% stroke color mixed with white
       const r1 = Math.round(rgb.r * 0.16 + 255 * 0.84);
@@ -295,7 +354,7 @@ export function buildMuxSvgBackground(mod) {
   const height = mod.height;
   const cut = getMuxCut(mod);
   // 默认颜色与 module.css 中 .module.mux 的 --module-stroke 一致
-  const strokeColor = mod.strokeColor || 'rgba(150, 108, 203, 0.6)';
+  const strokeColor = sanitizeSvgPaint(mod.strokeColor, 'rgba(150, 108, 203, 0.6)');
   const strokeWidth = Number.isFinite(mod.strokeWidth) ? mod.strokeWidth : 2;
 
   // 梯形路径：左上 -> 右上(下移cut) -> 右下(上移cut) -> 左下
@@ -304,7 +363,7 @@ export function buildMuxSvgBackground(mod) {
 
   const { fillAttr, gradientDef } = getModuleGradientFill(mod, strokeColor);
 
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${width}' height='${height}' viewBox='0 0 ${width} ${height}'>${gradientDef}<path d='${path}' fill='${fillAttr}' stroke='${strokeColor}' stroke-width='${strokeWidth}' stroke-linejoin='round'/></svg>`;
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${width}' height='${height}' viewBox='0 0 ${width} ${height}'>${gradientDef}<path d='${path}' fill='${escapeXml(fillAttr)}' stroke='${escapeXml(strokeColor)}' stroke-width='${strokeWidth}' stroke-linejoin='round'/></svg>`;
 
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
@@ -317,7 +376,7 @@ export function buildExtenderSvgBackground(mod) {
   const height = mod.height;
   const offset = getExtenderOffset(mod);
   // 默认颜色与 module.css 中 .module.extender 的 --module-stroke 一致
-  const strokeColor = mod.strokeColor || 'rgba(200, 110, 140, 0.8)';
+  const strokeColor = sanitizeSvgPaint(mod.strokeColor, 'rgba(200, 110, 140, 0.8)');
   const strokeWidth = Number.isFinite(mod.strokeWidth) ? mod.strokeWidth : 2;
   const sw2 = strokeWidth / 2;
   const topLeftY = Math.max(sw2, offset);
@@ -325,7 +384,7 @@ export function buildExtenderSvgBackground(mod) {
 
   const { fillAttr, gradientDef } = getModuleGradientFill(mod, strokeColor);
 
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${width}' height='${height}' viewBox='0 0 ${width} ${height}'>${gradientDef}<path d='${path}' fill='${fillAttr}' stroke='${strokeColor}' stroke-width='${strokeWidth}' stroke-linejoin='round'/></svg>`;
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${width}' height='${height}' viewBox='0 0 ${width} ${height}'>${gradientDef}<path d='${path}' fill='${escapeXml(fillAttr)}' stroke='${escapeXml(strokeColor)}' stroke-width='${strokeWidth}' stroke-linejoin='round'/></svg>`;
 
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
