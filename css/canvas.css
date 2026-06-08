@@ -20,6 +20,10 @@
     linear-gradient(120deg, #f9f5ef, #f2e8d8);
 }
 
+.canvas.panning {
+  cursor: grabbing;
+}
+
 .canvas::before {
   content: "";
   position: absolute;

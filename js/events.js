@@ -12,6 +12,8 @@ import { renderProperties } from './properties.js';
 import { describePortRef } from './port.js';
 import { serializeState, loadState, normalizeModuleImports, exportPng, exportSvg, refreshIdCounter, saveDiagramToStorage, scheduleAutoSave, loadDiagramFromStorage, clearDiagramStorage } from './export.js';
 import { initHistory, recordHistory, undoHistory, redoHistory } from './history.js';
+import { buildModuleClipboardData, createModuleFromClipboardData } from './module-transfer.js';
+import { updateModuleDragPosition, updateWireDragGeometry } from './interaction-logic.js';
 
 // 事件处理器引用
 let onModuleDragHandler = null;
@@ -158,29 +160,7 @@ function getAllowedModuleType(type) {
 
 function copySelectedModule(mod) {
   moduleClipboard = {
-    data: {
-      type: mod.type,
-      name: mod.name,
-      x: mod.x,
-      y: mod.y,
-      width: mod.width,
-      height: mod.height,
-      nameSize: mod.nameSize,
-      showType: mod.showType,
-      fill: mod.fill,
-      strokeColor: mod.strokeColor,
-      strokeWidth: mod.strokeWidth,
-      muxInputs: mod.muxInputs,
-      muxControlSide: mod.muxControlSide,
-      ports: Array.isArray(mod.ports)
-        ? mod.ports.map((port) => ({
-          name: port.name,
-          side: port.side,
-          offset: port.offset,
-          clock: port.clock === true,
-        }))
-        : [],
-    },
+    data: buildModuleClipboardData(mod),
     pasteOffset: 0,
   };
 }
@@ -190,34 +170,13 @@ function pasteClipboardModule() {
     return;
   }
   const data = moduleClipboard.data;
-  const type = resolveModuleType(data.type);
   const offset = MODULE_CLIPBOARD_OFFSET + moduleClipboard.pasteOffset;
   moduleClipboard.pasteOffset += MODULE_CLIPBOARD_OFFSET;
-  const moduleItem = {
-    id: uid("mod"),
-    type,
-    name: data.name,
-    x: Math.round((data.x || 0) + offset),
-    y: Math.round((data.y || 0) + offset),
-    width: data.width,
-    height: data.height,
-    nameSize: data.nameSize,
-    showType: data.showType,
-    fill: data.fill,
-    strokeColor: data.strokeColor,
-    strokeWidth: data.strokeWidth,
-    muxInputs: data.muxInputs,
-    muxControlSide: data.muxControlSide,
-    ports: Array.isArray(data.ports)
-      ? data.ports.map((port) => ({
-        id: uid("port"),
-        name: port.name,
-        side: port.side,
-        offset: port.offset,
-        clock: port.clock === true,
-      }))
-      : [],
-  };
+  const moduleItem = createModuleFromClipboardData(data, {
+    createId: uid,
+    offset,
+    resolveType: resolveModuleType,
+  });
   state.modules.push(moduleItem);
   select({ type: "module", id: moduleItem.id });
   recordHistory();
@@ -329,36 +288,7 @@ function onModuleDrag(event) {
   if (!mod) {
     return;
   }
-  if (event.shiftKey) {
-    if (!state.drag.axisLock) {
-      const dx = (event.clientX - state.drag.startX) / state.view.scale;
-      const dy = (event.clientY - state.drag.startY) / state.view.scale;
-      state.drag.axisLock = Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
-      state.drag.originX = mod.x;
-      state.drag.originY = mod.y;
-      state.drag.startX = event.clientX;
-      state.drag.startY = event.clientY;
-    }
-  } else if (state.drag.axisLock) {
-    state.drag.axisLock = null;
-    state.drag.originX = mod.x;
-    state.drag.originY = mod.y;
-    state.drag.startX = event.clientX;
-    state.drag.startY = event.clientY;
-  }
-
-  const dx = (event.clientX - state.drag.startX) / state.view.scale;
-  const dy = (event.clientY - state.drag.startY) / state.view.scale;
-  if (state.drag.axisLock === "x") {
-    mod.x = Math.round(state.drag.originX + dx);
-    mod.y = Math.round(state.drag.originY);
-  } else if (state.drag.axisLock === "y") {
-    mod.x = Math.round(state.drag.originX);
-    mod.y = Math.round(state.drag.originY + dy);
-  } else {
-    mod.x = Math.round(state.drag.originX + dx);
-    mod.y = Math.round(state.drag.originY + dy);
-  }
+  updateModuleDragPosition(mod, state.drag, event, state.view.scale);
   const el = moduleElements.get(mod.id);
   if (el) {
     el.style.left = `${mod.x}px`;
@@ -384,11 +314,21 @@ function endModuleDrag() {
  * 开始平移
  */
 function startPan(event) {
+  event.preventDefault();
+  if (event.currentTarget && typeof event.currentTarget.setPointerCapture === "function") {
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch (err) {
+      // Synthetic tests and some browser edge cases may not have an active pointer.
+    }
+  }
+  canvas.classList.add("panning");
   state.pan = {
     startX: event.clientX,
     startY: event.clientY,
     originX: state.view.offsetX,
     originY: state.view.offsetY,
+    pointerId: event.pointerId,
   };
 
   onPanHandler = onPan;
@@ -414,7 +354,15 @@ function onPan(event) {
  * 结束平移
  */
 function endPan() {
+  if (state.pan && typeof canvas.releasePointerCapture === "function") {
+    try {
+      canvas.releasePointerCapture(state.pan.pointerId);
+    } catch (err) {
+      // Pointer capture may already be released by the browser.
+    }
+  }
   state.pan = null;
+  canvas.classList.remove("panning");
   window.removeEventListener("pointermove", onPanHandler);
   window.removeEventListener("pointerup", endPanHandler);
 }
@@ -473,90 +421,7 @@ function onWireDrag(event) {
     return;
   }
 
-  const dx = (event.clientX - state.dragWire.startX) / state.view.scale;
-  const dy = (event.clientY - state.dragWire.startY) / state.view.scale;
-
-  if (state.dragWire.segmentIndex !== undefined && Array.isArray(wire.bends)) {
-    // 智能路由线段拖拽：移动线段保持直角
-    // 线段 segmentIndex 连接 points[segmentIndex] 和 points[segmentIndex + 1]
-    // points = [start, ...bends, end]，共有 bends.length + 2 个点
-    // 因此线段 0 是 start -> bends[0]
-    // 线段 1 是 bends[0] -> bends[1]
-    // 线段 n 是 bends[n-1] -> end
-    const segIdx = state.dragWire.segmentIndex;
-    const isHorizontal = state.dragWire.isHorizontal;
-    const origins = state.dragWire.origin;
-    const numBends = wire.bends.length;
-
-    // 水平线段只能垂直移动（改变 y 值），垂直线段只能水平移动（改变 x 值）
-    if (isHorizontal) {
-      // 水平线段：移动时改变相关点的 y 坐标
-      // 线段 segIdx 的两个端点：
-      // - 如果 segIdx == 0：端点是 start 和 bends[0]，只能移动 bends[0] 的 y
-      // - 如果 segIdx == numBends：端点是 bends[numBends-1] 和 end，只能移动 bends[numBends-1] 的 y
-      // - 否则：端点是 bends[segIdx-1] 和 bends[segIdx]，移动两个点的 y
-      if (segIdx === 0) {
-        // 第一段：只影响 bends[0]
-        wire.bends[0] = {
-          x: origins[0].x,
-          y: Math.round(origins[0].y + dy),
-        };
-      } else if (segIdx === numBends) {
-        // 最后一段：只影响 bends[numBends-1]
-        wire.bends[numBends - 1] = {
-          x: origins[numBends - 1].x,
-          y: Math.round(origins[numBends - 1].y + dy),
-        };
-      } else {
-        // 中间段：影响 bends[segIdx-1] 和 bends[segIdx]
-        wire.bends[segIdx - 1] = {
-          x: origins[segIdx - 1].x,
-          y: Math.round(origins[segIdx - 1].y + dy),
-        };
-        wire.bends[segIdx] = {
-          x: origins[segIdx].x,
-          y: Math.round(origins[segIdx].y + dy),
-        };
-      }
-    } else {
-      // 垂直线段：移动时改变相关点的 x 坐标
-      if (segIdx === 0) {
-        // 第一段：只影响 bends[0]
-        wire.bends[0] = {
-          x: Math.round(origins[0].x + dx),
-          y: origins[0].y,
-        };
-      } else if (segIdx === numBends) {
-        // 最后一段：只影响 bends[numBends-1]
-        wire.bends[numBends - 1] = {
-          x: Math.round(origins[numBends - 1].x + dx),
-          y: origins[numBends - 1].y,
-        };
-      } else {
-        // 中间段：影响 bends[segIdx-1] 和 bends[segIdx]
-        wire.bends[segIdx - 1] = {
-          x: Math.round(origins[segIdx - 1].x + dx),
-          y: origins[segIdx - 1].y,
-        };
-        wire.bends[segIdx] = {
-          x: Math.round(origins[segIdx].x + dx),
-          y: origins[segIdx].y,
-        };
-      }
-    }
-  } else if (state.dragWire.bendIndex >= 0 && Array.isArray(wire.bends)) {
-    const origin = state.dragWire.origin;
-    wire.bends[state.dragWire.bendIndex] = {
-      x: Math.round(origin.x + dx),
-      y: Math.round(origin.y + dy),
-    };
-  } else {
-    if (state.dragWire.route === "V") {
-      wire.bend = Math.round(state.dragWire.origin + dy);
-    } else {
-      wire.bend = Math.round(state.dragWire.origin + dx);
-    }
-  }
+  updateWireDragGeometry(wire, state.dragWire, event.clientX, event.clientY, state.view.scale);
   scheduleUpdateWires();
 }
 
@@ -796,10 +661,24 @@ export function initButtons() {
  * 初始化画布事件
  */
 export function initCanvasEvents() {
-  canvas.addEventListener("pointerdown", (event) => {
-    if (event.ctrlKey && event.button === 1) {
+  canvas.addEventListener("mousedown", (event) => {
+    if (event.button === 1) {
       event.preventDefault();
+    }
+  });
+
+  canvas.addEventListener("auxclick", (event) => {
+    if (event.button === 1) {
+      event.preventDefault();
+    }
+  });
+
+  canvas.addEventListener("pointerdown", (event) => {
+    if (event.button === 1) {
       startPan(event);
+      return;
+    }
+    if (event.button !== 0) {
       return;
     }
     if (event.target.closest(".module") || event.target.closest(".wire-hit")) {

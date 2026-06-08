@@ -5,21 +5,34 @@
 
 import { state, propertiesContent } from './state.js';
 import {
-  MODULE_LIBRARY,
   DEFAULT_MODULE,
   DEFAULT_WIRE,
-  MUX_DEFAULT,
   WIRE_STYLES,
   DEFAULT_CANVAS_BG,
   DEFAULT_PORT_LABEL_SIZE,
   PORT_LABEL_SIZE_RANGE
 } from './constants.js';
-import { uid, clamp, getModuleById, applyCanvasBackground, applyPortLabelSize, ensureMuxGeometry } from './utils.js';
+import { clamp, getModuleById, applyCanvasBackground, applyPortLabelSize } from './utils.js';
 import { scheduleAutoSave } from './export.js';
-import { setWireDefaultBend, setWireSmartBends } from './wire.js';
-import { ensureMuxPorts } from './module.js';
 import { describePortRef } from './port.js';
 import { recordHistory, recordCoalescedHistory } from './history.js';
+import {
+  addPort as addModulePort,
+  deleteModule,
+  deleteWire,
+  getModuleTypeOptions,
+  getPortSideOptions,
+  recomputeWireSmartRoute,
+  removePort,
+  resetModuleStyle,
+  resetWireToSimpleRoute,
+  setModuleHeight,
+  setModuleType,
+  setModuleWidth,
+  setMuxControlSide,
+  setMuxInputs,
+  setWireRoute,
+} from './property-logic.js';
 
 /**
  * 创建表单字段
@@ -242,9 +255,7 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
   resetStyleRow.className = "action-row";
   resetStyleRow.appendChild(
     makeButton("Reset Style", "btn-accent", () => {
-      mod.fill = DEFAULT_MODULE.fill;
-      mod.strokeColor = DEFAULT_MODULE.strokeColor;
-      mod.strokeWidth = DEFAULT_MODULE.strokeWidth;
+      resetModuleStyle(mod);
       renderModulesCallback({ immediate: true });
       renderPropertiesCallback();
     })
@@ -276,16 +287,10 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
     makeField(
       "Type",
       makeSelect(
-        Object.keys(MODULE_LIBRARY).map((key) => ({ value: key, label: MODULE_LIBRARY[key].label })),
+        getModuleTypeOptions(),
         mod.type,
         (value) => {
-          mod.type = value;
-          if (value === "mux") {
-            mod.muxInputs = MUX_DEFAULT.inputs;
-            mod.muxControlSide = MUX_DEFAULT.controlSide;
-            mod.ports = [];
-            ensureMuxPorts(mod);
-          }
+          setModuleType(mod, value);
           renderModulesCallback({ immediate: true });
           updateWiresCallback({ immediate: true });
           renderPropertiesCallback();
@@ -297,9 +302,8 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
   if (mod.type === "mux") {
     const muxInputsField = makeField(
       "Mux Inputs",
-      makeNumberInput(Number.isFinite(mod.muxInputs) ? mod.muxInputs : MUX_DEFAULT.inputs, { min: 2, max: 8, step: 1 }, (value) => {
-        mod.muxInputs = clamp(Math.round(value), 2, 8);
-        ensureMuxPorts(mod);
+      makeNumberInput(Number.isFinite(mod.muxInputs) ? mod.muxInputs : 2, { min: 2, max: 8, step: 1 }, (value) => {
+        setMuxInputs(mod, value);
         renderModulesCallback();
         updateWiresCallback();
         renderPropertiesCallback();
@@ -314,10 +318,9 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
           { value: "top", label: "Top" },
           { value: "bottom", label: "Bottom" },
         ],
-        mod.muxControlSide || MUX_DEFAULT.controlSide,
+        mod.muxControlSide || "top",
         (value) => {
-          mod.muxControlSide = value;
-          ensureMuxPorts(mod);
+          setMuxControlSide(mod, value);
           renderModulesCallback({ immediate: true });
           updateWiresCallback({ immediate: true });
         }
@@ -334,29 +337,20 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
   sizeRow.className = "field-row";
   let heightInput;
   const widthInput = makeNumberInput(mod.width, { min: 40, max: 1000, step: 1 }, (value) => {
-    mod.width = clamp(Math.round(value), 40, 1000);
-    if (mod.type === "mux") {
-      const beforeHeight = mod.height;
-      ensureMuxGeometry(mod, "keepWidth");
-      if (heightInput && mod.height !== beforeHeight) {
-        heightInput.value = mod.height;
-      }
+    const result = setModuleWidth(mod, value);
+    if (heightInput && result.heightChanged) {
+      heightInput.value = mod.height;
     }
     renderModulesCallback();
     updateWiresCallback();
   });
   heightInput = makeNumberInput(mod.height, { min: 60, max: 1200, step: 1 }, (value) => {
-    mod.height = clamp(Math.round(value), 60, 1200);
-    if (mod.type === "mux") {
-      const beforeWidth = mod.width;
-      const beforeHeight = mod.height;
-      ensureMuxGeometry(mod, "keepHeight");
-      if (mod.width !== beforeWidth) {
-        widthInput.value = mod.width;
-      }
-      if (mod.height !== beforeHeight) {
-        heightInput.value = mod.height;
-      }
+    const result = setModuleHeight(mod, value);
+    if (result.widthChanged) {
+      widthInput.value = mod.width;
+    }
+    if (result.heightChanged) {
+      heightInput.value = mod.height;
     }
     renderModulesCallback();
     updateWiresCallback();
@@ -385,18 +379,7 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
       renderModulesCallback();
     });
 
-    const isClockPort = mod.type === "reg" && (port.clock === true || port.name === "CLK");
-    const sideOptions = isClockPort
-      ? [
-        { value: "top", label: "Top" },
-        { value: "bottom", label: "Bottom" },
-      ]
-      : [
-        { value: "left", label: "Left" },
-        { value: "right", label: "Right" },
-        { value: "top", label: "Top" },
-        { value: "bottom", label: "Bottom" },
-      ];
+    const sideOptions = getPortSideOptions(mod, port);
     const sideSelect = makeSelect(sideOptions, port.side, (value) => {
       port.side = value;
       renderModulesCallback({ immediate: true });
@@ -410,8 +393,7 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
     });
 
     const removeButton = makeButton("Remove", "", () => {
-      mod.ports = mod.ports.filter((item) => item.id !== port.id);
-      state.wires = state.wires.filter((wire) => wire.from.portId !== port.id && wire.to.portId !== port.id);
+      state.wires = removePort(mod, state.wires, port.id);
       state.connecting = null;
       renderModulesCallback({ immediate: true });
       updateWiresCallback({ immediate: true });
@@ -429,12 +411,7 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
   portsField.appendChild(portList);
 
   const addPort = makeButton("Add Port", "btn-accent", () => {
-    mod.ports.push({
-      id: uid("port"),
-      name: `P${mod.ports.length + 1}`,
-      side: "left",
-      offset: 0.5,
-    });
+    addModulePort(mod);
     renderModulesCallback({ immediate: true });
     updateWiresCallback({ immediate: true });
     renderPropertiesCallback();
@@ -447,8 +424,9 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
   actionRow.className = "action-row";
   actionRow.appendChild(
     makeButton("Delete Module", "danger", () => {
-      state.modules = state.modules.filter((item) => item.id !== mod.id);
-      state.wires = state.wires.filter((wire) => wire.from.moduleId !== mod.id && wire.to.moduleId !== mod.id);
+      const next = deleteModule(state.modules, state.wires, mod.id);
+      state.modules = next.modules;
+      state.wires = next.wires;
       state.selection = null;
       state.connecting = null;
       renderModulesCallback({ immediate: true });
@@ -535,9 +513,7 @@ function renderWireProperties(wire, updateWiresCallback, renderPropertiesCallbac
       ],
       wire.route,
       (value) => {
-        wire.route = value;
-        setWireDefaultBend(wire);
-        wire.bends = null;
+        setWireRoute(wire, value);
         updateWiresCallback({ immediate: true });
         renderPropertiesCallback();
       }
@@ -591,8 +567,7 @@ function renderWireProperties(wire, updateWiresCallback, renderPropertiesCallbac
     resetRouteRow.className = "action-row";
     resetRouteRow.appendChild(
       makeButton("Reset to Simple Route", "btn-accent", () => {
-        wire.bends = null;
-        setWireDefaultBend(wire);
+        resetWireToSimpleRoute(wire);
         updateWiresCallback({ immediate: true });
         renderPropertiesCallback();
       })
@@ -603,9 +578,7 @@ function renderWireProperties(wire, updateWiresCallback, renderPropertiesCallbac
     recomputeRow.className = "action-row";
     recomputeRow.appendChild(
       makeButton("Recompute Smart Route", "btn-accent", () => {
-        wire.bends = null;
-        setWireDefaultBend(wire);
-        setWireSmartBends(wire);
+        recomputeWireSmartRoute(wire);
         updateWiresCallback({ immediate: true });
         renderPropertiesCallback();
       })
@@ -625,7 +598,7 @@ function renderWireProperties(wire, updateWiresCallback, renderPropertiesCallbac
     smartRouteRow.className = "action-row";
     smartRouteRow.appendChild(
       makeButton("Enable Smart Route", "btn-accent", () => {
-        setWireSmartBends(wire);
+        recomputeWireSmartRoute(wire);
         updateWiresCallback({ immediate: true });
         renderPropertiesCallback();
       })
@@ -642,7 +615,7 @@ function renderWireProperties(wire, updateWiresCallback, renderPropertiesCallbac
   actionRow.className = "action-row";
   actionRow.appendChild(
     makeButton("Delete Wire", "danger", () => {
-      state.wires = state.wires.filter((item) => item.id !== wire.id);
+      state.wires = deleteWire(state.wires, wire.id);
       state.selection = null;
       renderModulesCallback({ immediate: true });
       updateWiresCallback({ immediate: true });
