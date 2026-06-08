@@ -11,7 +11,7 @@ import { createWire, updateWires, syncSvgSize } from './wire.js';
 import { renderProperties } from './properties.js';
 import { describePortRef, getPortByRef, getPortPositionByRef } from './port.js';
 import { serializeState, loadState, normalizeModuleImports, exportPng, exportSvg, refreshIdCounter, saveDiagramToStorage, scheduleAutoSave, loadDiagramFromStorage, clearDiagramStorage } from './export.js';
-import { initHistory, recordHistory, undoHistory, redoHistory } from './history.js';
+import { initHistory, recordHistory, recordCoalescedHistory, undoHistory, redoHistory } from './history.js';
 import { buildModuleClipboardData, createModuleFromClipboardData } from './module-transfer.js';
 import {
   buildWireSnapContext,
@@ -210,6 +210,42 @@ function pasteClipboardModule() {
   select({ type: "module", id: moduleItem.id });
   recordHistory();
   scheduleAutoSave();
+}
+
+function nudgeSelectedModule(event) {
+  if (event.ctrlKey || event.metaKey || event.altKey) {
+    return false;
+  }
+  const deltas = {
+    ArrowUp: { x: 0, y: -1 },
+    ArrowDown: { x: 0, y: 1 },
+    ArrowLeft: { x: -1, y: 0 },
+    ArrowRight: { x: 1, y: 0 },
+  };
+  const delta = deltas[event.key];
+  if (!delta || !state.selection || state.selection.type !== "module") {
+    return false;
+  }
+  const mod = getModuleById(state.selection.id);
+  if (!mod) {
+    return false;
+  }
+
+  event.preventDefault();
+  mod.x = Math.round(mod.x + delta.x);
+  mod.y = Math.round(mod.y + delta.y);
+
+  const el = moduleElements.get(mod.id);
+  if (el) {
+    el.style.left = `${mod.x}px`;
+    el.style.top = `${mod.y}px`;
+  }
+
+  scheduleUpdateWires();
+  doRenderProperties();
+  recordCoalescedHistory();
+  scheduleAutoSave();
+  return true;
 }
 
 function addModulesFromJson(rawText) {
@@ -533,6 +569,7 @@ export function initButtons() {
   const modal = document.getElementById("modal");
   const modalTitle = document.getElementById("modal-title");
   const modalText = document.getElementById("modal-text");
+  const modalCopy = document.getElementById("modal-copy");
   const modalClose = document.getElementById("modal-close");
   const modalApply = document.getElementById("modal-apply");
   const importModuleButton = document.getElementById("btn-import-module");
@@ -542,6 +579,7 @@ export function initButtons() {
   const demoEscutervButton = document.getElementById("btn-demo-escuterv");
   const demoLfsrButton = document.getElementById("btn-demo-lfsr");
   let modalMode = "export";
+  let copyStatusTimer = null;
 
   const diagramCallbacks = {
     renderModules: doRenderModules,
@@ -553,22 +591,30 @@ export function initButtons() {
   const openModal = (mode) => {
     modalMode = mode;
     modalText.placeholder = "";
+    modalCopy.textContent = "Copy";
+    if (copyStatusTimer) {
+      clearTimeout(copyStatusTimer);
+      copyStatusTimer = null;
+    }
     if (mode === "export") {
       modalTitle.textContent = "Export JSON";
       modalText.value = JSON.stringify(serializeState(), null, 2);
       modalText.readOnly = true;
+      modalCopy.style.display = "inline-flex";
       modalApply.style.display = "none";
     } else if (mode === "import-module") {
       modalTitle.textContent = "Import Module JSON";
       modalText.value = "";
       modalText.readOnly = false;
       modalText.placeholder = "Paste a module JSON object here";
+      modalCopy.style.display = "none";
       modalApply.style.display = "inline-flex";
     } else {
       modalTitle.textContent = "Import JSON";
       modalText.value = "";
       modalText.readOnly = false;
       modalText.placeholder = "Paste diagram JSON here";
+      modalCopy.style.display = "none";
       modalApply.style.display = "inline-flex";
     }
     modal.classList.remove("hidden");
@@ -576,6 +622,52 @@ export function initButtons() {
 
   const closeModal = () => {
     modal.classList.add("hidden");
+  };
+
+  const setCopyStatus = (label) => {
+    modalCopy.textContent = label;
+    if (copyStatusTimer) {
+      clearTimeout(copyStatusTimer);
+    }
+    copyStatusTimer = setTimeout(() => {
+      copyStatusTimer = null;
+      modalCopy.textContent = "Copy";
+    }, 1200);
+  };
+
+  const copyModalTextFallback = () => {
+    const activeElement = document.activeElement;
+    modalText.focus();
+    modalText.select();
+    modalText.setSelectionRange(0, modalText.value.length);
+    const copied = document.execCommand("copy");
+    if (activeElement && typeof activeElement.focus === "function") {
+      activeElement.focus();
+    }
+    if (!copied) {
+      throw new Error("Copy command failed.");
+    }
+  };
+
+  const copyModalText = async () => {
+    if (modalMode !== "export") {
+      return;
+    }
+    try {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+        await navigator.clipboard.writeText(modalText.value);
+      } else {
+        copyModalTextFallback();
+      }
+      setCopyStatus("Copied");
+    } catch (err) {
+      try {
+        copyModalTextFallback();
+        setCopyStatus("Copied");
+      } catch (fallbackErr) {
+        alert("Failed to copy JSON.");
+      }
+    }
   };
 
   const loadDemo = async (path) => {
@@ -601,6 +693,7 @@ export function initButtons() {
     importModuleButton.addEventListener("click", () => openModal("import-module"));
   }
 
+  modalCopy.addEventListener("click", copyModalText);
   modalClose.addEventListener("click", closeModal);
   modal.addEventListener("click", (event) => {
     if (event.target === modal) {
@@ -814,6 +907,9 @@ export function initKeyboardEvents() {
         pasteClipboardModule();
         event.preventDefault();
       }
+      return;
+    }
+    if (nudgeSelectedModule(event)) {
       return;
     }
     if (event.key === "Delete" || event.key === "Backspace") {
