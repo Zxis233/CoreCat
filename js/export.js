@@ -32,14 +32,10 @@ import {
   buildWirePath,
   wireLabelPosition,
   pointKey,
-  getWireBendPoints,
-  getWirePathPoints,
-  getWireSegments,
-  getOutgoingDirection,
-  isPointOnSegment,
+  collectWireRenderItems,
+  computeWireOverlapKeys,
   BEND_MARKER_MIN_RADIUS,
-  BEND_MARKER_OVERLAP_BOOST,
-  BEND_OVERLAP_EPS
+  BEND_MARKER_OVERLAP_BOOST
 } from './wire.js';
 import { ensureMuxPorts } from './module.js';
 
@@ -568,94 +564,8 @@ export function buildExportSvg(options) {
   }
   parts.push(`<g transform="translate(${offsetX} ${offsetY}) scale(${scale})">`);
 
-  const wireRenderItems = [];
-  const bendPointMap = new Map();
-  const renderItemMap = new Map();
-
-  state.wires.forEach((wire) => {
-    const start = getPortPositionByRef(wire.from);
-    const end = getPortPositionByRef(wire.to);
-    if (!start || !end) {
-      return;
-    }
-    const bendPoints = getWireBendPoints(wire, start, end);
-    bendPoints.forEach((point) => {
-      const key = pointKey(point);
-      if (!bendPointMap.has(key)) {
-        bendPointMap.set(key, new Set());
-      }
-      bendPointMap.get(key).add(wire.id);
-    });
-    const pathPoints = getWirePathPoints(wire, start, end);
-    const segments = getWireSegments(pathPoints);
-    const bendDirections = new Map();
-    for (let i = 1; i < pathPoints.length - 1; i++) {
-      const point = pathPoints[i];
-      const dir = getOutgoingDirection(pathPoints, i);
-      if (!dir) {
-        continue;
-      }
-      const key = pointKey(point);
-      if (!bendDirections.has(key)) {
-        bendDirections.set(key, new Set());
-      }
-      bendDirections.get(key).add(dir);
-    }
-    const item = { wire, start, end, bendPoints, segments, bendDirections };
-    wireRenderItems.push(item);
-    renderItemMap.set(wire.id, item);
-  });
-
-  const overlapKeys = new Set();
-  bendPointMap.forEach((wireIds, key) => {
-    if (wireIds.size <= 1) {
-      return;
-    }
-    const directions = new Set();
-    wireIds.forEach((wireId) => {
-      const item = renderItemMap.get(wireId);
-      if (!item) {
-        return;
-      }
-      const dirSet = item.bendDirections.get(key);
-      if (!dirSet) {
-        return;
-      }
-      dirSet.forEach((dir) => directions.add(dir));
-    });
-    if (directions.size > 1) {
-      overlapKeys.add(key);
-    }
-  });
-
-  wireRenderItems.forEach((item) => {
-    item.bendPoints.forEach((point) => {
-      const key = pointKey(point);
-      if (overlapKeys.has(key)) {
-        return;
-      }
-      const bendWireIds = bendPointMap.get(key);
-      for (const other of wireRenderItems) {
-        if (other.wire.id === item.wire.id) {
-          continue;
-        }
-        if (bendWireIds && bendWireIds.has(other.wire.id)) {
-          continue;
-        }
-        let hit = false;
-        for (const segment of other.segments) {
-          if (isPointOnSegment(point, segment)) {
-            overlapKeys.add(key);
-            hit = true;
-            break;
-          }
-        }
-        if (hit) {
-          break;
-        }
-      }
-    });
-  });
+  const { renderItems: wireRenderItems, bendPointMap, renderItemMap } = collectWireRenderItems();
+  const overlapKeys = computeWireOverlapKeys(wireRenderItems, bendPointMap, renderItemMap);
 
   wireRenderItems.forEach(({ wire, start, end, bendPoints }) => {
     const color = sanitizeSvgPaint(wire.color, DEFAULT_WIRE.color);

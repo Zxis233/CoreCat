@@ -23,6 +23,29 @@ let endWireDragHandler = null;
 const MODULE_CLIPBOARD_OFFSET = 24;
 const MODULE_DRAG_MIME = "application/x-corecat-module";
 let moduleClipboard = null;
+let pendingWireRenderFrame = null;
+let pendingWireRenderUsesTimeout = false;
+
+function requestWireRenderFrame(callback) {
+  if (typeof window.requestAnimationFrame === "function") {
+    pendingWireRenderUsesTimeout = false;
+    return window.requestAnimationFrame(callback);
+  }
+  pendingWireRenderUsesTimeout = true;
+  return window.setTimeout(callback, 16);
+}
+
+function cancelScheduledWireRender() {
+  if (pendingWireRenderFrame === null) {
+    return;
+  }
+  if (pendingWireRenderUsesTimeout) {
+    window.clearTimeout(pendingWireRenderFrame);
+  } else if (typeof window.cancelAnimationFrame === "function") {
+    window.cancelAnimationFrame(pendingWireRenderFrame);
+  }
+  pendingWireRenderFrame = null;
+}
 
 /**
  * 应用视图变换
@@ -111,7 +134,18 @@ function doRenderModules() {
 }
 
 function doUpdateWires() {
+  cancelScheduledWireRender();
   updateWires(select, startWireDrag);
+}
+
+function scheduleUpdateWires() {
+  if (pendingWireRenderFrame !== null) {
+    return;
+  }
+  pendingWireRenderFrame = requestWireRenderFrame(() => {
+    pendingWireRenderFrame = null;
+    updateWires(select, startWireDrag);
+  });
 }
 
 function doRenderProperties() {
@@ -392,7 +426,7 @@ function onModuleDrag(event) {
     el.style.left = `${mod.x}px`;
     el.style.top = `${mod.y}px`;
   }
-  doUpdateWires();
+  scheduleUpdateWires();
 }
 
 /**
@@ -402,6 +436,8 @@ function endModuleDrag() {
   state.drag = null;
   window.removeEventListener("pointermove", onModuleDragHandler);
   window.removeEventListener("pointerup", endModuleDragHandler);
+  doUpdateWires();
+  doRenderProperties();
   recordHistory();
   scheduleAutoSave();
 }
@@ -434,7 +470,6 @@ function onPan(event) {
   state.view.offsetX = state.pan.originX + (event.clientX - state.pan.startX);
   state.view.offsetY = state.pan.originY + (event.clientY - state.pan.startY);
   applyViewTransform();
-  doUpdateWires();
 }
 
 /**
@@ -584,7 +619,7 @@ function onWireDrag(event) {
       wire.bend = Math.round(state.dragWire.origin + dx);
     }
   }
-  doUpdateWires();
+  scheduleUpdateWires();
 }
 
 /**
@@ -594,6 +629,7 @@ function endWireDrag() {
   state.dragWire = null;
   window.removeEventListener("pointermove", onWireDragHandler);
   window.removeEventListener("pointerup", endWireDragHandler);
+  doUpdateWires();
   doRenderProperties();
   recordHistory();
   scheduleAutoSave();
@@ -836,7 +872,7 @@ export function initCanvasEvents() {
       return;
     }
     state.connecting.cursor = getCanvasPoint(event);
-    doUpdateWires();
+    scheduleUpdateWires();
   });
 
   canvas.addEventListener(
@@ -859,7 +895,6 @@ export function initCanvasEvents() {
         state.view.offsetX = cursorX - worldX * nextScale;
         state.view.offsetY = cursorY - worldY * nextScale;
         applyViewTransform();
-        doUpdateWires();
         updateStatus();
         return;
       }
@@ -880,7 +915,6 @@ export function initCanvasEvents() {
         state.view.offsetY -= deltaY;
       }
       applyViewTransform();
-      doUpdateWires();
     },
     { passive: false }
   );
@@ -943,7 +977,7 @@ export function initKeyboardEvents() {
 export function initWindowEvents() {
   window.addEventListener("resize", () => {
     syncSvgSize();
-    doUpdateWires();
+    scheduleUpdateWires();
   });
 }
 

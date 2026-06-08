@@ -11,9 +11,20 @@ const MAX_HISTORY = Math.max(
   1,
   Math.round(Number.isFinite(HISTORY_MAX_STEPS) ? HISTORY_MAX_STEPS : 0) + 1
 );
+const COALESCED_HISTORY_DELAY = 600;
 let undoStack = [];
 let redoStack = [];
 let isRestoring = false;
+let coalescedHistoryTimer = null;
+let isCoalescingHistory = false;
+
+function stopCoalescingHistory() {
+  if (coalescedHistoryTimer) {
+    clearTimeout(coalescedHistoryTimer);
+    coalescedHistoryTimer = null;
+  }
+  isCoalescingHistory = false;
+}
 
 function isValidSelection(selection) {
   if (!selection || typeof selection !== 'object') {
@@ -39,6 +50,36 @@ function makeSnapshot() {
   };
 }
 
+function pushSnapshot(snapshot) {
+  if (undoStack.length === 0) {
+    undoStack = [snapshot];
+    redoStack = [];
+    return;
+  }
+  const last = undoStack[undoStack.length - 1];
+  if (last && last.signature === snapshot.signature) {
+    return;
+  }
+  undoStack.push(snapshot);
+  if (undoStack.length > MAX_HISTORY) {
+    undoStack.shift();
+  }
+  redoStack = [];
+}
+
+function replaceCoalescedSnapshot(snapshot) {
+  const previous = undoStack[undoStack.length - 2];
+  if (previous && previous.signature === snapshot.signature) {
+    undoStack.pop();
+    isCoalescingHistory = false;
+    return;
+  }
+  const last = undoStack[undoStack.length - 1];
+  if (!last || last.signature !== snapshot.signature) {
+    undoStack[undoStack.length - 1] = snapshot;
+  }
+}
+
 function restoreSnapshot(snapshot, callbacks) {
   if (!snapshot) {
     return;
@@ -60,6 +101,7 @@ function restoreSnapshot(snapshot, callbacks) {
 }
 
 export function initHistory() {
+  stopCoalescingHistory();
   undoStack = [makeSnapshot()];
   redoStack = [];
 }
@@ -68,27 +110,42 @@ export function recordHistory() {
   if (isRestoring) {
     return;
   }
+  stopCoalescingHistory();
+  pushSnapshot(makeSnapshot());
+}
+
+export function recordCoalescedHistory(delay = COALESCED_HISTORY_DELAY) {
+  if (isRestoring) {
+    return;
+  }
   const snapshot = makeSnapshot();
-  if (undoStack.length === 0) {
-    undoStack = [snapshot];
-    redoStack = [];
-    return;
-  }
   const last = undoStack[undoStack.length - 1];
-  if (last && last.signature === snapshot.signature) {
+  if (!isCoalescingHistory && last && last.signature === snapshot.signature) {
     return;
   }
-  undoStack.push(snapshot);
-  if (undoStack.length > MAX_HISTORY) {
-    undoStack.shift();
+
+  if (isCoalescingHistory && undoStack.length > 0) {
+    replaceCoalescedSnapshot(snapshot);
+  } else {
+    pushSnapshot(snapshot);
+    const current = undoStack[undoStack.length - 1];
+    isCoalescingHistory = Boolean(current && current.signature === snapshot.signature);
   }
-  redoStack = [];
+
+  if (coalescedHistoryTimer) {
+    clearTimeout(coalescedHistoryTimer);
+  }
+  coalescedHistoryTimer = setTimeout(() => {
+    coalescedHistoryTimer = null;
+    isCoalescingHistory = false;
+  }, delay);
 }
 
 export function undoHistory(callbacks) {
   if (undoStack.length < 2) {
     return false;
   }
+  stopCoalescingHistory();
   isRestoring = true;
   const current = undoStack.pop();
   redoStack.push(current);
@@ -102,6 +159,7 @@ export function redoHistory(callbacks) {
   if (redoStack.length === 0) {
     return false;
   }
+  stopCoalescingHistory();
   isRestoring = true;
   const snapshot = redoStack.pop();
   undoStack.push(snapshot);

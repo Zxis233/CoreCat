@@ -19,7 +19,7 @@ import { scheduleAutoSave } from './export.js';
 import { setWireDefaultBend, setWireSmartBends } from './wire.js';
 import { ensureMuxPorts } from './module.js';
 import { describePortRef } from './port.js';
-import { recordHistory } from './history.js';
+import { recordHistory, recordCoalescedHistory } from './history.js';
 
 /**
  * 创建表单字段
@@ -130,7 +130,7 @@ function renderCanvasProperties(renderPropertiesCallback) {
       makeColorInput(state.canvasBackground || DEFAULT_CANVAS_BG, (value) => {
         state.canvasBackground = value;
         applyCanvasBackground();
-        recordHistory();
+        recordCoalescedHistory();
         scheduleAutoSave();
       })
     )
@@ -162,7 +162,7 @@ function renderCanvasProperties(renderPropertiesCallback) {
       state.portLabelSize = next;
       portLabelInput.value = next;
       applyPortLabelSize();
-      recordHistory();
+      recordCoalescedHistory();
       scheduleAutoSave();
     }
   );
@@ -245,7 +245,7 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
       mod.fill = DEFAULT_MODULE.fill;
       mod.strokeColor = DEFAULT_MODULE.strokeColor;
       mod.strokeWidth = DEFAULT_MODULE.strokeWidth;
-      renderModulesCallback();
+      renderModulesCallback({ immediate: true });
       renderPropertiesCallback();
     })
   );
@@ -266,7 +266,7 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
   showTypeLabel.textContent = "Show Type";
   const showTypeInput = makeCheckbox(mod.showType !== false, (value) => {
     mod.showType = value;
-    renderModulesCallback();
+    renderModulesCallback({ immediate: true });
   });
   showTypeField.appendChild(showTypeLabel);
   showTypeField.appendChild(showTypeInput);
@@ -286,8 +286,8 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
             mod.ports = [];
             ensureMuxPorts(mod);
           }
-          renderModulesCallback();
-          updateWiresCallback();
+          renderModulesCallback({ immediate: true });
+          updateWiresCallback({ immediate: true });
           renderPropertiesCallback();
         }
       )
@@ -318,8 +318,8 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
         (value) => {
           mod.muxControlSide = value;
           ensureMuxPorts(mod);
-          renderModulesCallback();
-          updateWiresCallback();
+          renderModulesCallback({ immediate: true });
+          updateWiresCallback({ immediate: true });
         }
       )
     );
@@ -399,8 +399,8 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
       ];
     const sideSelect = makeSelect(sideOptions, port.side, (value) => {
       port.side = value;
-      renderModulesCallback();
-      updateWiresCallback();
+      renderModulesCallback({ immediate: true });
+      updateWiresCallback({ immediate: true });
     });
 
     const offsetInput = makeNumberInput(Math.round(port.offset * 100), { min: 0, max: 100, step: 1 }, (value) => {
@@ -413,8 +413,8 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
       mod.ports = mod.ports.filter((item) => item.id !== port.id);
       state.wires = state.wires.filter((wire) => wire.from.portId !== port.id && wire.to.portId !== port.id);
       state.connecting = null;
-      renderModulesCallback();
-      updateWiresCallback();
+      renderModulesCallback({ immediate: true });
+      updateWiresCallback({ immediate: true });
       renderPropertiesCallback();
       updateStatusCallback();
     });
@@ -435,8 +435,8 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
       side: "left",
       offset: 0.5,
     });
-    renderModulesCallback();
-    updateWiresCallback();
+    renderModulesCallback({ immediate: true });
+    updateWiresCallback({ immediate: true });
     renderPropertiesCallback();
   });
 
@@ -451,8 +451,8 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
       state.wires = state.wires.filter((wire) => wire.from.moduleId !== mod.id && wire.to.moduleId !== mod.id);
       state.selection = null;
       state.connecting = null;
-      renderModulesCallback();
-      updateWiresCallback();
+      renderModulesCallback({ immediate: true });
+      updateWiresCallback({ immediate: true });
       renderPropertiesCallback();
       updateStatusCallback();
     })
@@ -485,7 +485,7 @@ function renderWireProperties(wire, updateWiresCallback, renderPropertiesCallbac
       labelAtValue,
       (value) => {
         wire.labelAt = value;
-        updateWiresCallback();
+        updateWiresCallback({ immediate: true });
       }
     )
   );
@@ -520,7 +520,7 @@ function renderWireProperties(wire, updateWiresCallback, renderPropertiesCallbac
       wire.style || DEFAULT_WIRE.style,
       (value) => {
         wire.style = value;
-        updateWiresCallback();
+        updateWiresCallback({ immediate: true });
       }
     )
   );
@@ -538,7 +538,7 @@ function renderWireProperties(wire, updateWiresCallback, renderPropertiesCallbac
         wire.route = value;
         setWireDefaultBend(wire);
         wire.bends = null;
-        updateWiresCallback();
+        updateWiresCallback({ immediate: true });
         renderPropertiesCallback();
       }
     )
@@ -593,7 +593,7 @@ function renderWireProperties(wire, updateWiresCallback, renderPropertiesCallbac
       makeButton("Reset to Simple Route", "btn-accent", () => {
         wire.bends = null;
         setWireDefaultBend(wire);
-        updateWiresCallback();
+        updateWiresCallback({ immediate: true });
         renderPropertiesCallback();
       })
     );
@@ -606,7 +606,7 @@ function renderWireProperties(wire, updateWiresCallback, renderPropertiesCallbac
         wire.bends = null;
         setWireDefaultBend(wire);
         setWireSmartBends(wire);
-        updateWiresCallback();
+        updateWiresCallback({ immediate: true });
         renderPropertiesCallback();
       })
     );
@@ -626,7 +626,7 @@ function renderWireProperties(wire, updateWiresCallback, renderPropertiesCallbac
     smartRouteRow.appendChild(
       makeButton("Enable Smart Route", "btn-accent", () => {
         setWireSmartBends(wire);
-        updateWiresCallback();
+        updateWiresCallback({ immediate: true });
         renderPropertiesCallback();
       })
     );
@@ -644,8 +644,8 @@ function renderWireProperties(wire, updateWiresCallback, renderPropertiesCallbac
     makeButton("Delete Wire", "danger", () => {
       state.wires = state.wires.filter((item) => item.id !== wire.id);
       state.selection = null;
-      renderModulesCallback();
-      updateWiresCallback();
+      renderModulesCallback({ immediate: true });
+      updateWiresCallback({ immediate: true });
       renderPropertiesCallback();
       updateStatusCallback();
     })
@@ -657,15 +657,21 @@ function renderWireProperties(wire, updateWiresCallback, renderPropertiesCallbac
  * 渲染属性面板
  */
 export function renderProperties(renderModulesCallback, updateWiresCallback, updateStatusCallback) {
-  const renderModules = () => {
-    renderModulesCallback();
-    recordHistory();
+  const commitHistory = (options) => {
+    if (options && options.immediate) {
+      recordHistory();
+    } else {
+      recordCoalescedHistory();
+    }
     scheduleAutoSave();
   };
-  const updateWires = () => {
+  const renderModules = (options) => {
+    renderModulesCallback();
+    commitHistory(options);
+  };
+  const updateWires = (options) => {
     updateWiresCallback();
-    recordHistory();
-    scheduleAutoSave();
+    commitHistory(options);
   };
   const renderPropertiesCallback = () => renderProperties(renderModulesCallback, updateWiresCallback, updateStatusCallback);
 
