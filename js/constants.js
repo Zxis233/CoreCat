@@ -101,6 +101,14 @@ export const WIRE_MARGIN = 20;
 export const DEFAULT_CANVAS_BG = "#f6f1e8";
 export const DEFAULT_PORT_LABEL_SIZE = 14;
 export const PORT_LABEL_SIZE_RANGE = { min: 8, max: 32 };
+export const GRID_SIZE = 24;
+export const WIRE_SNAP_DISTANCE = 8;
+export const WIRE_SNAP_MODES = {
+  NONE: "none",
+  PORT: "port",
+  GRID_AND_PORT: "grid-port",
+};
+export const DEFAULT_WIRE_SNAP_MODE = WIRE_SNAP_MODES.GRID_AND_PORT;
 
 export const HISTORY_MAX_STEPS = 5;
 

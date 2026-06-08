@@ -10,7 +10,8 @@ import {
   WIRE_STYLES,
   DEFAULT_CANVAS_BG,
   DEFAULT_PORT_LABEL_SIZE,
-  PORT_LABEL_SIZE_RANGE
+  PORT_LABEL_SIZE_RANGE,
+  WIRE_SNAP_MODES
 } from './constants.js';
 import { clamp, getModuleById, applyCanvasBackground, applyPortLabelSize } from './utils.js';
 import { scheduleAutoSave } from './export.js';
@@ -180,6 +181,25 @@ function renderCanvasProperties(renderPropertiesCallback) {
     }
   );
   propertiesContent.appendChild(makeField("Port Label Size", portLabelInput));
+
+  propertiesContent.appendChild(
+    makeField(
+      "Snap Level",
+      makeSelect(
+        [
+          { value: WIRE_SNAP_MODES.NONE, label: "No Snap" },
+          { value: WIRE_SNAP_MODES.PORT, label: "Port Snap" },
+          { value: WIRE_SNAP_MODES.GRID_AND_PORT, label: "Grid and Port Snap" },
+        ],
+        state.wireSnapMode || WIRE_SNAP_MODES.GRID_AND_PORT,
+        (value) => {
+          state.wireSnapMode = value;
+          recordHistory();
+          scheduleAutoSave();
+        }
+      )
+    )
+  );
 }
 
 /**

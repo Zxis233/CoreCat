@@ -3,7 +3,7 @@
  * 包含全局状态对象和DOM元素引用
  */
 
-import { DEFAULT_PORT_LABEL_SIZE } from './constants.js';
+import { DEFAULT_PORT_LABEL_SIZE, DEFAULT_WIRE_SNAP_MODE } from './constants.js';
 
 export const state = {
   modules: [],
@@ -17,6 +17,7 @@ export const state = {
   typeCounts: {},
   canvasBackground: "",
   portLabelSize: DEFAULT_PORT_LABEL_SIZE,
+  wireSnapMode: DEFAULT_WIRE_SNAP_MODE,
   view: {
     scale: 1,
     offsetX: 0,

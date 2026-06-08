@@ -9,7 +9,9 @@ import {
   WIRE_STYLES,
   MUX_DEFAULT,
   DEFAULT_PORT_LABEL_SIZE,
-  PORT_LABEL_SIZE_RANGE
+  PORT_LABEL_SIZE_RANGE,
+  DEFAULT_WIRE_SNAP_MODE,
+  WIRE_SNAP_MODES
 } from './constants.js';
 import { sanitizeSvgPaint, uid } from './utils.js';
 import { isKnownModuleType } from './module.js';
@@ -43,6 +45,10 @@ function normalizeString(value, fallback = "", maxLength = NORMALIZE_LIMITS.text
     return fallback;
   }
   return value.slice(0, maxLength);
+}
+
+function normalizeWireSnapMode(value) {
+  return Object.values(WIRE_SNAP_MODES).includes(value) ? value : DEFAULT_WIRE_SNAP_MODE;
 }
 
 function normalizeNumber(value, fallback, min, max, round = false) {
@@ -279,6 +285,7 @@ export function normalizeDiagram(data) {
         PORT_LABEL_SIZE_RANGE.max,
         true
       ),
+      wireSnapMode: normalizeWireSnapMode(data.wireSnapMode),
       modules,
       wires,
     },

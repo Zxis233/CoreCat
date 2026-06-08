@@ -9,11 +9,16 @@ import { getCanvasPoint, getModuleById, applyCanvasBackground, applyPortLabelSiz
 import { createModule, renderModules, ensureMuxPorts, isKnownModuleType, resolveModuleType } from './module.js';
 import { createWire, updateWires, syncSvgSize } from './wire.js';
 import { renderProperties } from './properties.js';
-import { describePortRef } from './port.js';
+import { describePortRef, getPortByRef, getPortPositionByRef } from './port.js';
 import { serializeState, loadState, normalizeModuleImports, exportPng, exportSvg, refreshIdCounter, saveDiagramToStorage, scheduleAutoSave, loadDiagramFromStorage, clearDiagramStorage } from './export.js';
 import { initHistory, recordHistory, undoHistory, redoHistory } from './history.js';
 import { buildModuleClipboardData, createModuleFromClipboardData } from './module-transfer.js';
-import { updateModuleDragPosition, updateWireDragGeometry } from './interaction-logic.js';
+import {
+  buildWireSnapContext,
+  snapConnectionCursor,
+  updateModuleDragPosition,
+  updateWireDragGeometry,
+} from './interaction-logic.js';
 
 // 事件处理器引用
 let onModuleDragHandler = null;
@@ -158,6 +163,30 @@ function getAllowedModuleType(type) {
   return isKnownModuleType(type) ? type : null;
 }
 
+function getSnappedConnectionCursor(fromRef, event) {
+  const cursor = getCanvasPoint(event);
+  const start = getPortPositionByRef(fromRef);
+  const portRef = getPortByRef(fromRef);
+  if (!start || !portRef) {
+    return cursor;
+  }
+  return snapConnectionCursor(start, cursor, portRef.port.side, { mode: state.wireSnapMode });
+}
+
+function buildSnapContextForWire(wire) {
+  const start = getPortPositionByRef(wire.from);
+  const end = getPortPositionByRef(wire.to);
+  const fromPortRef = getPortByRef(wire.from);
+  const toPortRef = getPortByRef(wire.to);
+  return buildWireSnapContext(
+    start,
+    end,
+    fromPortRef ? fromPortRef.port.side : null,
+    toPortRef ? toPortRef.port.side : null,
+    { mode: state.wireSnapMode }
+  );
+}
+
 function copySelectedModule(mod) {
   moduleClipboard = {
     data: buildModuleClipboardData(mod),
@@ -249,9 +278,10 @@ function handlePortClick(event, mod, port) {
     return;
   }
 
+  const fromRef = { moduleId: mod.id, portId: port.id };
   state.connecting = {
-    from: { moduleId: mod.id, portId: port.id },
-    cursor: getCanvasPoint(event),
+    from: fromRef,
+    cursor: getPortPositionByRef(fromRef) || getSnappedConnectionCursor(fromRef, event),
   };
   doUpdateWires();
   updateStatus();
@@ -400,6 +430,7 @@ function startWireDrag(event, wire, bendIndex = -1, segmentIndex = undefined, is
     origin: origin,
     startX: event.clientX,
     startY: event.clientY,
+    snapContext: buildSnapContextForWire(wire),
   };
 
   onWireDragHandler = onWireDrag;
@@ -696,7 +727,7 @@ export function initCanvasEvents() {
     if (!state.connecting) {
       return;
     }
-    state.connecting.cursor = getCanvasPoint(event);
+    state.connecting.cursor = getSnappedConnectionCursor(state.connecting.from, event);
     scheduleUpdateWires();
   });
 

@@ -31,6 +31,14 @@ circle.wire-handle {
   cursor: ew-resize;
 }
 
+circle.wire-handle.horizontal {
+  cursor: ns-resize;
+}
+
+circle.wire-handle.vertical {
+  cursor: ew-resize;
+}
+
 circle.wire-bend {
   pointer-events: none;
   opacity: 0;

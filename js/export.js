@@ -499,6 +499,7 @@ export function serializeState() {
   return {
     canvasBackground: state.canvasBackground,
     portLabelSize: state.portLabelSize,
+    wireSnapMode: state.wireSnapMode,
     modules: state.modules.map((mod) => ({
       id: mod.id,
       type: mod.type,
@@ -571,6 +572,7 @@ export function loadState(data, callbacks, options = {}) {
   applyCanvasBackground();
   state.portLabelSize = diagram.portLabelSize;
   applyPortLabelSize();
+  state.wireSnapMode = diagram.wireSnapMode;
   state.modules = diagram.modules;
   state.wires = diagram.wires;
   state.typeCounts = countModuleTypes(state.modules);

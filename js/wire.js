@@ -6,7 +6,8 @@
 import { state, wireLayer, canvas } from './state.js';
 import { DEFAULT_WIRE, WIRE_STYLES, WIRE_MARGIN } from './constants.js';
 import { uid, svgEl, getModuleById } from './utils.js';
-import { getPortPositionByRef, describePortRef } from './port.js';
+import { getPortByRef, getPortPositionByRef } from './port.js';
+import { isHorizontalPortSide, isVerticalPortSide } from './interaction-logic.js';
 import {
   BEND_MARKER_MIN_RADIUS,
   BEND_MARKER_OVERLAP_BOOST,
@@ -305,6 +306,19 @@ export function setWireSmartBends(wire) {
   }
 }
 
+function getDefaultWireRoute(from, to) {
+  const fromSide = getPortByRef(from)?.port.side;
+  const toSide = getPortByRef(to)?.port.side;
+
+  if (isVerticalPortSide(fromSide) && isVerticalPortSide(toSide)) {
+    return "V";
+  }
+  if (isHorizontalPortSide(fromSide) && isHorizontalPortSide(toSide)) {
+    return "H";
+  }
+  return "H";
+}
+
 export function createWire(from, to, selectCallback) {
   const wire = {
     id: uid("wire"),
@@ -312,7 +326,7 @@ export function createWire(from, to, selectCallback) {
     to,
     label: "",
     labelAt: "end",
-    route: "H",
+    route: getDefaultWireRoute(from, to),
     bend: 0,
     bends: null,
     color: DEFAULT_WIRE.color,
@@ -419,11 +433,12 @@ export function updateWires(selectCallback, startWireDragCallback) {
     if (isSelected) {
       const handlePositions = getWireHandlePositions(wire, start, end);
       handlePositions.forEach((pos) => {
+        const isHorizontalHandle = pos.segmentIndex !== undefined ? pos.isHorizontal : wire.route === "V";
         const handle = svgEl("circle", {
           cx: pos.x,
           cy: pos.y,
           r: 6,
-          class: "wire-handle",
+          class: `wire-handle ${isHorizontalHandle ? "horizontal" : "vertical"}`,
         });
         handle.addEventListener("pointerdown", (event) => {
           if (event.button !== 0) {
@@ -444,9 +459,15 @@ export function updateWires(selectCallback, startWireDragCallback) {
     const start = getPortPositionByRef(state.connecting.from);
     if (start) {
       const end = state.connecting.cursor;
+      const fromSide = getPortByRef(state.connecting.from)?.port.side;
+      const isVerticalPreview = isVerticalPortSide(fromSide);
       const midX = (start.x + end.x) / 2;
+      const midY = (start.y + end.y) / 2;
+      const previewPath = isVerticalPreview
+        ? `M ${start.x} ${start.y} L ${start.x} ${midY} L ${end.x} ${midY} L ${end.x} ${end.y}`
+        : `M ${start.x} ${start.y} L ${midX} ${start.y} L ${midX} ${end.y} L ${end.x} ${end.y}`;
       const preview = svgEl("path", {
-        d: `M ${start.x} ${start.y} L ${midX} ${start.y} L ${midX} ${end.y} L ${end.x} ${end.y}`,
+        d: previewPath,
         class: "wire preview",
       });
       wireLayer.appendChild(preview);
