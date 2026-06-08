@@ -6,7 +6,7 @@
 import { state, canvas, moduleLayer, wireLayer, moduleElements, statusEl } from './state.js';
 import { MODULE_LIBRARY } from './constants.js';
 import { getCanvasPoint, getModuleById, applyCanvasBackground, applyPortLabelSize, clamp, isTypingTarget, uid, ensureMuxGeometry } from './utils.js';
-import { createModule, renderModules, ensureMuxPorts } from './module.js';
+import { createModule, renderModules, ensureMuxPorts, isKnownModuleType, resolveModuleType } from './module.js';
 import { createWire, updateWires, syncSvgSize } from './wire.js';
 import { renderProperties } from './properties.js';
 import { describePortRef } from './port.js';
@@ -152,6 +152,10 @@ function doRenderProperties() {
   renderProperties(doRenderModules, doUpdateWires, updateStatus);
 }
 
+function getAllowedModuleType(type) {
+  return isKnownModuleType(type) ? type : null;
+}
+
 function copySelectedModule(mod) {
   moduleClipboard = {
     data: {
@@ -186,11 +190,12 @@ function pasteClipboardModule() {
     return;
   }
   const data = moduleClipboard.data;
+  const type = resolveModuleType(data.type);
   const offset = MODULE_CLIPBOARD_OFFSET + moduleClipboard.pasteOffset;
   moduleClipboard.pasteOffset += MODULE_CLIPBOARD_OFFSET;
   const moduleItem = {
     id: uid("mod"),
-    type: data.type,
+    type,
     name: data.name,
     x: Math.round((data.x || 0) + offset),
     y: Math.round((data.y || 0) + offset),
@@ -575,12 +580,20 @@ export function initPalette() {
   const paletteItems = document.querySelectorAll(".palette-item");
   paletteItems.forEach((item) => {
     item.addEventListener("dragstart", (event) => {
-      event.dataTransfer.setData(MODULE_DRAG_MIME, item.dataset.type);
+      const type = getAllowedModuleType(item.dataset.type);
+      if (!type) {
+        event.preventDefault();
+        return;
+      }
+      event.dataTransfer.setData(MODULE_DRAG_MIME, type);
       event.dataTransfer.effectAllowed = "copy";
     });
     item.addEventListener("click", () => {
-      const type = item.dataset.type;
-      const library = MODULE_LIBRARY[type] || MODULE_LIBRARY.seq;
+      const type = getAllowedModuleType(item.dataset.type);
+      if (!type) {
+        return;
+      }
+      const library = MODULE_LIBRARY[type];
       const rect = canvas.getBoundingClientRect();
       const x = rect.width / 2 - library.width / 2;
       const y = rect.height / 2 - library.height / 2;
@@ -604,12 +617,12 @@ export function initPalette() {
     if (!event.dataTransfer) {
       return;
     }
-    const type = event.dataTransfer.getData(MODULE_DRAG_MIME);
+    const type = getAllowedModuleType(event.dataTransfer.getData(MODULE_DRAG_MIME));
     if (!type) {
       return;
     }
     event.preventDefault();
-    const library = MODULE_LIBRARY[type] || MODULE_LIBRARY.seq;
+    const library = MODULE_LIBRARY[type];
     const point = getCanvasPoint(event);
     createModule(type, point.x - library.width / 2, point.y - library.height / 2, select);
     recordHistory();

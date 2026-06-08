@@ -37,7 +37,7 @@ import {
   BEND_MARKER_MIN_RADIUS,
   BEND_MARKER_OVERLAP_BOOST
 } from './wire.js';
-import { ensureMuxPorts } from './module.js';
+import { ensureMuxPorts, isKnownModuleType } from './module.js';
 
 const MODULE_STROKE_COLORS = {
   alu: "rgba(242, 193, 78, 0.8)",
@@ -172,11 +172,11 @@ function normalizeModule(rawModule, index, usedModuleIds, warnings) {
   }
 
   const rawType = typeof rawModule.type === "string" ? rawModule.type : "seq";
-  const type = MODULE_LIBRARY[rawType] ? rawType : "seq";
+  const type = isKnownModuleType(rawType) ? rawType : "seq";
   if (type !== rawType) {
     addNormalizeWarning(warnings, `Module ${index + 1} has unknown type ${rawType}; seq was used.`);
   }
-  const library = MODULE_LIBRARY[type] || MODULE_LIBRARY.seq;
+  const library = MODULE_LIBRARY[type];
   const id = normalizeId(rawModule.id, "mod", usedModuleIds, warnings, `Module ${index + 1}`);
 
   const moduleItem = {
@@ -672,7 +672,7 @@ export function buildExportSvg(options) {
           mod.name
         )}</text>`
       );
-      const typeLabel = MODULE_LIBRARY[mod.type] ? MODULE_LIBRARY[mod.type].label : mod.type;
+      const typeLabel = isKnownModuleType(mod.type) ? MODULE_LIBRARY[mod.type].label : mod.type;
       parts.push(
         `<text class="module-type" x="${centerX}" y="${typeY}" text-anchor="middle" dominant-baseline="middle" font-size="${typeSize}">${escapeXml(
           typeLabel

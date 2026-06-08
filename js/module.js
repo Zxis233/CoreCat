@@ -11,6 +11,14 @@ import { getPortLocalPosition } from './port.js';
 // 模块层事件委托处理器引用
 let moduleLayerDelegatedHandler = null;
 
+export function isKnownModuleType(type) {
+  return typeof type === "string" && Object.prototype.hasOwnProperty.call(MODULE_LIBRARY, type);
+}
+
+export function resolveModuleType(type) {
+  return isKnownModuleType(type) ? type : "seq";
+}
+
 /**
  * 应用模块外观样式
  */
@@ -85,11 +93,12 @@ export function ensureMuxPorts(mod) {
  * 创建模块
  */
 export function createModule(type, x, y, selectCallback) {
-  const library = MODULE_LIBRARY[type] || MODULE_LIBRARY.seq;
-  const count = (state.typeCounts[type] = (state.typeCounts[type] || 0) + 1);
+  const moduleType = resolveModuleType(type);
+  const library = MODULE_LIBRARY[moduleType];
+  const count = (state.typeCounts[moduleType] = (state.typeCounts[moduleType] || 0) + 1);
   const moduleItem = {
     id: uid("mod"),
-    type,
+    type: moduleType,
     name: `${library.label} ${count}`,
     x: Math.round(x),
     y: Math.round(y),
@@ -105,7 +114,7 @@ export function createModule(type, x, y, selectCallback) {
       clock: port.clock === true,
     })),
   };
-  if (type === "mux") {
+  if (moduleType === "mux") {
     moduleItem.name = ``;
     moduleItem.muxInputs = MUX_DEFAULT.inputs;
     moduleItem.muxControlSide = MUX_DEFAULT.controlSide;
@@ -186,7 +195,7 @@ function createModuleElement(mod) {
   if (mod.showType) {
     const type = document.createElement("div");
     type.className = "module-type";
-    type.textContent = MODULE_LIBRARY[mod.type] ? MODULE_LIBRARY[mod.type].label : mod.type;
+    type.textContent = isKnownModuleType(mod.type) ? MODULE_LIBRARY[mod.type].label : mod.type;
     header.appendChild(type);
   }
   el.appendChild(header);
