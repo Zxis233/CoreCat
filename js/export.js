@@ -345,6 +345,35 @@ export function normalizeDiagram(data) {
   };
 }
 
+export function normalizeModuleImports(data, existingModuleIds = new Set()) {
+  const warnings = [];
+  const source = Array.isArray(data)
+    ? data
+    : (data && typeof data === "object" && Array.isArray(data.modules))
+      ? data.modules
+      : [data];
+
+  if (source.length > NORMALIZE_LIMITS.modules) {
+    addNormalizeWarning(warnings, "Module import has too many modules; extra modules were ignored.");
+  }
+
+  const usedModuleIds = new Set(existingModuleIds);
+  const modules = source
+    .slice(0, NORMALIZE_LIMITS.modules)
+    .map((moduleData, index) => {
+      const shouldUseLibraryPorts =
+        moduleData &&
+        typeof moduleData === "object" &&
+        Array.isArray(moduleData.ports) &&
+        moduleData.ports.length === 0;
+      const importData = shouldUseLibraryPorts ? { ...moduleData, ports: undefined } : moduleData;
+      return normalizeModule(importData, index, usedModuleIds, warnings);
+    })
+    .filter(Boolean);
+
+  return { modules, warnings };
+}
+
 /**
  * 保存至本地存储
  */

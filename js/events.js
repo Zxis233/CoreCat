@@ -4,13 +4,13 @@
  */
 
 import { state, canvas, moduleLayer, wireLayer, moduleElements, statusEl } from './state.js';
-import { MODULE_LIBRARY, DEFAULT_MODULE, MUX_DEFAULT } from './constants.js';
+import { MODULE_LIBRARY } from './constants.js';
 import { getCanvasPoint, getModuleById, applyCanvasBackground, applyPortLabelSize, clamp, isTypingTarget, uid, ensureMuxGeometry } from './utils.js';
 import { createModule, renderModules, ensureMuxPorts } from './module.js';
 import { createWire, updateWires, syncSvgSize } from './wire.js';
 import { renderProperties } from './properties.js';
 import { describePortRef } from './port.js';
-import { serializeState, loadState, exportPng, exportSvg, refreshIdCounter, saveDiagramToStorage, scheduleAutoSave, loadDiagramFromStorage, clearDiagramStorage } from './export.js';
+import { serializeState, loadState, normalizeModuleImports, exportPng, exportSvg, refreshIdCounter, saveDiagramToStorage, scheduleAutoSave, loadDiagramFromStorage, clearDiagramStorage } from './export.js';
 import { initHistory, recordHistory, undoHistory, redoHistory } from './history.js';
 
 // 事件处理器引用
@@ -219,72 +219,6 @@ function pasteClipboardModule() {
   scheduleAutoSave();
 }
 
-function buildModuleFromJson(data, usedModuleIds) {
-  if (!data || typeof data !== "object") {
-    return null;
-  }
-  const rawType = typeof data.type === "string" ? data.type : "seq";
-  const type = MODULE_LIBRARY[rawType] ? rawType : "seq";
-  const library = MODULE_LIBRARY[type] || MODULE_LIBRARY.seq;
-  let moduleId = typeof data.id === "string" ? data.id.trim() : "";
-  if (!moduleId || usedModuleIds.has(moduleId)) {
-    moduleId = uid("mod");
-  }
-  usedModuleIds.add(moduleId);
-
-  const moduleItem = {
-    id: moduleId,
-    type,
-    name: typeof data.name === "string" && data.name.trim() ? data.name : library.label,
-    x: Number.isFinite(data.x) ? Math.round(data.x) : 0,
-    y: Number.isFinite(data.y) ? Math.round(data.y) : 0,
-    width: Number.isFinite(data.width) ? Math.round(data.width) : library.width,
-    height: Number.isFinite(data.height) ? Math.round(data.height) : library.height,
-    nameSize: Number.isFinite(data.nameSize) ? data.nameSize : DEFAULT_MODULE.nameSize,
-    showType: data.showType === undefined ? DEFAULT_MODULE.showType : Boolean(data.showType),
-    fill: typeof data.fill === "string" ? data.fill : DEFAULT_MODULE.fill,
-    strokeColor: typeof data.strokeColor === "string" ? data.strokeColor : DEFAULT_MODULE.strokeColor,
-    strokeWidth: Number.isFinite(data.strokeWidth) ? data.strokeWidth : DEFAULT_MODULE.strokeWidth,
-    ports: [],
-  };
-
-  if (type === "mux") {
-    moduleItem.muxInputs = Number.isFinite(data.muxInputs) ? clamp(Math.round(data.muxInputs), 2, 8) : MUX_DEFAULT.inputs;
-    moduleItem.muxControlSide = data.muxControlSide === "bottom" ? "bottom" : MUX_DEFAULT.controlSide;
-  }
-
-  const portsSource = Array.isArray(data.ports) && data.ports.length > 0
-    ? data.ports
-    : (Array.isArray(library.ports) ? library.ports : []);
-  const usedPortIds = new Set();
-  moduleItem.ports = portsSource.map((port, index) => {
-    const name = typeof port.name === "string" && port.name ? port.name : `P${index + 1}`;
-    const side = typeof port.side === "string" && port.side ? port.side : "left";
-    const offset = Number.isFinite(port.offset) ? clamp(port.offset, 0, 1) : 0.5;
-    let portId = typeof port.id === "string" ? port.id.trim() : "";
-    if (!portId || usedPortIds.has(portId)) {
-      portId = uid("port");
-    }
-    usedPortIds.add(portId);
-    return {
-      id: portId,
-      name,
-      side,
-      offset,
-      clock: port.clock === true,
-    };
-  });
-
-  if (type === "mux") {
-    if (moduleItem.ports.length === 0) {
-      ensureMuxPorts(moduleItem);
-    }
-    ensureMuxGeometry(moduleItem);
-  }
-
-  return moduleItem;
-}
-
 function addModulesFromJson(rawText) {
   let data;
   try {
@@ -299,18 +233,17 @@ function addModulesFromJson(rawText) {
     return false;
   }
 
-  const moduleList = Array.isArray(data)
-    ? data
-    : Array.isArray(data.modules)
-      ? data.modules
-      : [data];
-
-  const usedModuleIds = new Set(state.modules.map((mod) => mod.id));
-  const newModules = [];
-  moduleList.forEach((item) => {
-    const moduleItem = buildModuleFromJson(item, usedModuleIds);
-    if (moduleItem) {
-      newModules.push(moduleItem);
+  const normalized = normalizeModuleImports(data, new Set(state.modules.map((mod) => mod.id)));
+  if (normalized.warnings.length > 0) {
+    console.warn("CoreCat module import issues:", normalized.warnings);
+  }
+  const newModules = normalized.modules;
+  newModules.forEach((moduleItem) => {
+    if (moduleItem.type === "mux") {
+      if (!Array.isArray(moduleItem.ports) || moduleItem.ports.length === 0) {
+        ensureMuxPorts(moduleItem);
+      }
+      ensureMuxGeometry(moduleItem);
     }
   });
 
