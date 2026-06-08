@@ -48,10 +48,20 @@
   user-select: none;
 }
 
+.commit-hash {
+  margin-left: 8px;
+  font-family: "Maple Mono Normal NF CN", "Maple Mono NF CN", "Consolas", "Courier New", monospace;
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: rgba(255, 255, 255, 0.68);
+  vertical-align: 1px;
+}
+
 .brand-sub {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.75);
-  text-align: right;
+  text-align: left;
   user-select: none;
 }
 
