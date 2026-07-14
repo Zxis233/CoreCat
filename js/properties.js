@@ -11,9 +11,10 @@ import {
   DEFAULT_CANVAS_BG,
   DEFAULT_PORT_LABEL_SIZE,
   PORT_LABEL_SIZE_RANGE,
-  WIRE_SNAP_MODES
+  WIRE_SNAP_MODES,
+  DIAGRAM_LIMITS
 } from './constants.js';
-import { clamp, getModuleById, applyCanvasBackground, applyPortLabelSize } from './utils.js';
+import { clamp, getModuleById, applyCanvasBackground, applyPortLabelSize, isClockPort } from './utils.js';
 import { scheduleAutoSave } from './export.js';
 import { describePortRef } from './port.js';
 import { recordHistory, recordCoalescedHistory } from './history.js';
@@ -35,6 +36,23 @@ import {
   setWireRoute,
 } from './property-logic.js';
 
+let propertyControlId = 0;
+
+function nextPropertyControlId(prefix = "property-control") {
+  propertyControlId += 1;
+  return `${prefix}-${propertyControlId}`;
+}
+
+function labelControl(label, control, labelText) {
+  if (!control.id) {
+    control.id = nextPropertyControlId();
+  }
+  label.htmlFor = control.id;
+  if (!control.getAttribute("aria-label")) {
+    control.setAttribute("aria-label", labelText);
+  }
+}
+
 /**
  * 创建表单字段
  */
@@ -43,6 +61,7 @@ function makeField(labelText, inputEl) {
   field.className = "field";
   const label = document.createElement("label");
   label.textContent = labelText;
+  labelControl(label, inputEl, labelText);
   field.appendChild(label);
   field.appendChild(inputEl);
   return field;
@@ -54,6 +73,7 @@ function makeField(labelText, inputEl) {
 function makeTextInput(value, onInput) {
   const input = document.createElement("input");
   input.type = "text";
+  input.maxLength = DIAGRAM_LIMITS.textLength;
   input.value = value || "";
   input.addEventListener("input", () => onInput(input.value));
   return input;
@@ -126,6 +146,7 @@ function makeSelect(options, value, onChange) {
  */
 function makeButton(label, className, onClick) {
   const button = document.createElement("button");
+  button.type = "button";
   button.textContent = label;
   if (className) {
     button.classList.add(className);
@@ -212,6 +233,7 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
       makeTextInput(mod.name, (value) => {
         mod.name = value;
         renderModulesCallback();
+        updateWiresCallback();
       })
     )
   );
@@ -220,8 +242,11 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
   positionField.className = "field";
   const positionLabel = document.createElement("label");
   positionLabel.textContent = "Position";
+  positionLabel.id = nextPropertyControlId("property-group-label");
   const positionRow = document.createElement("div");
   positionRow.className = "field-row";
+  positionRow.setAttribute("role", "group");
+  positionRow.setAttribute("aria-labelledby", positionLabel.id);
   const xInput = makeNumberInput(Number.isFinite(mod.x) ? mod.x : 0, { step: 1 }, (value) => {
     mod.x = Math.round(value);
     xInput.value = mod.x;
@@ -230,6 +255,7 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
   });
   xInput.placeholder = "X";
   xInput.title = "X position";
+  xInput.setAttribute("aria-label", "Module X position");
   const yInput = makeNumberInput(Number.isFinite(mod.y) ? mod.y : 0, { step: 1 }, (value) => {
     mod.y = Math.round(value);
     yInput.value = mod.y;
@@ -238,6 +264,7 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
   });
   yInput.placeholder = "Y";
   yInput.title = "Y position";
+  yInput.setAttribute("aria-label", "Module Y position");
   positionRow.appendChild(xInput);
   positionRow.appendChild(yInput);
   positionField.appendChild(positionLabel);
@@ -267,6 +294,7 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
     makeNumberInput(Number.isFinite(mod.strokeWidth) ? mod.strokeWidth : 2, { min: 0, max: 8, step: 0.2 }, (value) => {
       mod.strokeWidth = clamp(value, 0, 8);
       renderModulesCallback();
+      updateWiresCallback();
     })
   );
   propertiesContent.appendChild(strokeWidthField);
@@ -277,6 +305,7 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
     makeButton("Reset Style", "btn-accent", () => {
       resetModuleStyle(mod);
       renderModulesCallback({ immediate: true });
+      updateWiresCallback({ immediate: true });
       renderPropertiesCallback();
     })
   );
@@ -299,6 +328,7 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
     mod.showType = value;
     renderModulesCallback({ immediate: true });
   });
+  labelControl(showTypeLabel, showTypeInput, "Show module type");
   showTypeField.appendChild(showTypeLabel);
   showTypeField.appendChild(showTypeInput);
   propertiesContent.appendChild(showTypeField);
@@ -324,8 +354,8 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
       "Mux Inputs",
       makeNumberInput(Number.isFinite(mod.muxInputs) ? mod.muxInputs : 2, { min: 2, max: 8, step: 1 }, (value) => {
         setMuxInputs(mod, value);
-        renderModulesCallback();
-        updateWiresCallback();
+        renderModulesCallback({ immediate: true });
+        updateWiresCallback({ immediate: true });
         renderPropertiesCallback();
       })
     );
@@ -353,8 +383,11 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
   sizeField.className = "field";
   const sizeLabel = document.createElement("label");
   sizeLabel.textContent = "Size";
+  sizeLabel.id = nextPropertyControlId("property-group-label");
   const sizeRow = document.createElement("div");
   sizeRow.className = "field-row";
+  sizeRow.setAttribute("role", "group");
+  sizeRow.setAttribute("aria-labelledby", sizeLabel.id);
   let heightInput;
   const widthInput = makeNumberInput(mod.width, { min: 40, max: 1000, step: 1 }, (value) => {
     const result = setModuleWidth(mod, value);
@@ -364,6 +397,7 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
     renderModulesCallback();
     updateWiresCallback();
   });
+  widthInput.setAttribute("aria-label", "Module width");
   heightInput = makeNumberInput(mod.height, { min: 60, max: 1200, step: 1 }, (value) => {
     const result = setModuleHeight(mod, value);
     if (result.widthChanged) {
@@ -375,6 +409,7 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
     renderModulesCallback();
     updateWiresCallback();
   });
+  heightInput.setAttribute("aria-label", "Module height");
   sizeRow.appendChild(widthInput);
   sizeRow.appendChild(heightInput);
   sizeField.appendChild(sizeLabel);
@@ -385,19 +420,27 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
   portsField.className = "field";
   const portsLabel = document.createElement("label");
   portsLabel.textContent = "Ports";
+  portsLabel.id = nextPropertyControlId("property-group-label");
   portsField.appendChild(portsLabel);
 
   const portList = document.createElement("div");
   portList.className = "port-list";
+  portList.setAttribute("role", "group");
+  portList.setAttribute("aria-labelledby", portsLabel.id);
 
-  mod.ports.forEach((port) => {
+  mod.ports.forEach((port, portIndex) => {
     const row = document.createElement("div");
     row.className = "port-row";
 
     const nameInput = makeTextInput(port.name, (value) => {
       port.name = value;
+      if (isClockPort(mod, port) && port.side !== "top" && port.side !== "bottom") {
+        port.side = "bottom";
+      }
       renderModulesCallback();
+      updateWiresCallback();
     });
+    nameInput.setAttribute("aria-label", `Port ${portIndex + 1} name`);
 
     const sideOptions = getPortSideOptions(mod, port);
     const sideSelect = makeSelect(sideOptions, port.side, (value) => {
@@ -405,12 +448,14 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
       renderModulesCallback({ immediate: true });
       updateWiresCallback({ immediate: true });
     });
+    sideSelect.setAttribute("aria-label", `Port ${portIndex + 1} side`);
 
     const offsetInput = makeNumberInput(Math.round(port.offset * 100), { min: 0, max: 100, step: 1 }, (value) => {
       port.offset = clamp(value / 100, 0, 1);
       renderModulesCallback();
       updateWiresCallback();
     });
+    offsetInput.setAttribute("aria-label", `Port ${portIndex + 1} offset percent`);
 
     const removeButton = makeButton("Remove", "", () => {
       state.wires = removePort(mod, state.wires, port.id);
@@ -420,6 +465,7 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
       renderPropertiesCallback();
       updateStatusCallback();
     });
+    removeButton.setAttribute("aria-label", `Remove port ${port.name || portIndex + 1}`);
 
     row.appendChild(nameInput);
     row.appendChild(sideSelect);
@@ -431,12 +477,17 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
   portsField.appendChild(portList);
 
   const addPort = makeButton("Add Port", "btn-accent", () => {
-    addModulePort(mod);
+    if (!addModulePort(mod)) {
+      return;
+    }
     renderModulesCallback({ immediate: true });
     updateWiresCallback({ immediate: true });
     renderPropertiesCallback();
   });
-
+  if (mod.ports.length >= DIAGRAM_LIMITS.portsPerModule) {
+    addPort.disabled = true;
+    addPort.title = `Port limit reached (${DIAGRAM_LIMITS.portsPerModule})`;
+  }
   portsField.appendChild(addPort);
   propertiesContent.appendChild(portsField);
 
@@ -566,6 +617,7 @@ function renderWireProperties(wire, updateWiresCallback, renderPropertiesCallbac
       });
       xInput.placeholder = "X";
       xInput.title = "X position";
+      xInput.setAttribute("aria-label", `Bend point ${index + 1} X position`);
 
       const yInput = makeNumberInput(bend.y, { step: 1 }, (value) => {
         wire.bends[index].y = Math.round(value);
@@ -573,6 +625,7 @@ function renderWireProperties(wire, updateWiresCallback, renderPropertiesCallbac
       });
       yInput.placeholder = "Y";
       yInput.title = "Y position";
+      yInput.setAttribute("aria-label", `Bend point ${index + 1} Y position`);
 
       row.appendChild(label);
       row.appendChild(xInput);
@@ -659,11 +712,11 @@ export function renderProperties(renderModulesCallback, updateWiresCallback, upd
     scheduleAutoSave();
   };
   const renderModules = (options) => {
-    renderModulesCallback();
+    renderModulesCallback(options);
     commitHistory(options);
   };
   const updateWires = (options) => {
-    updateWiresCallback();
+    updateWiresCallback(options);
     commitHistory(options);
   };
   const renderPropertiesCallback = () => renderProperties(renderModulesCallback, updateWiresCallback, updateStatusCallback);

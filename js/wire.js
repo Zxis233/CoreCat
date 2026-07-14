@@ -4,9 +4,9 @@
  */
 
 import { state, wireLayer, canvas } from './state.js';
-import { DEFAULT_WIRE, WIRE_STYLES, WIRE_MARGIN } from './constants.js';
-import { uid, svgEl, getModuleById } from './utils.js';
-import { getPortByRef, getPortPositionByRef } from './port.js';
+import { DEFAULT_WIRE, WIRE_STYLES, WIRE_MARGIN, DIAGRAM_LIMITS } from './constants.js';
+import { uid, svgEl } from './utils.js';
+import { buildModulePortIndex, describePortRef, getPortByRef, getPortPositionByRef } from './port.js';
 import { isHorizontalPortSide, isVerticalPortSide } from './interaction-logic.js';
 import {
   BEND_MARKER_MIN_RADIUS,
@@ -36,6 +36,41 @@ export {
   wireLabelPosition,
 } from './wire-geometry.js';
 
+const wireDomEntries = new Map();
+let connectionPreviewElement = null;
+let wireHandleLayer = null;
+
+function applyWireLabelGeometry(label, labelPos) {
+  if (!label || !labelPos) {
+    return;
+  }
+  label.setAttribute("x", labelPos.x);
+  label.setAttribute("y", labelPos.y);
+  label.setAttribute("text-anchor", labelPos.anchor || "middle");
+  label.setAttribute("dominant-baseline", labelPos.baseline || "central");
+  if (labelPos.angle) {
+    label.setAttribute("transform", `rotate(${labelPos.angle} ${labelPos.x} ${labelPos.y})`);
+  } else {
+    label.removeAttribute("transform");
+  }
+}
+
+function buildConnectionPreviewPath(start, end, fromSide) {
+  const isVerticalPreview = isVerticalPortSide(fromSide);
+  const midX = (start.x + end.x) / 2;
+  const midY = (start.y + end.y) / 2;
+  return isVerticalPreview
+    ? `M ${start.x} ${start.y} L ${start.x} ${midY} L ${end.x} ${midY} L ${end.x} ${end.y}`
+    : `M ${start.x} ${start.y} L ${midX} ${start.y} L ${midX} ${end.y} L ${end.x} ${end.y}`;
+}
+
+function describePortRefWithIndex(ref, portIndex) {
+  const indexedRef = portIndex ? getPortByRef(ref, portIndex) : null;
+  return indexedRef
+    ? `${indexedRef.mod.name}:${indexedRef.port.name}`
+    : describePortRef(ref);
+}
+
 function addSetMapValue(map, key, value) {
   if (!map.has(key)) {
     map.set(key, new Set());
@@ -47,10 +82,11 @@ export function collectWireRenderItems(wires = state.wires) {
   const renderItems = [];
   const bendPointMap = new Map();
   const renderItemMap = new Map();
+  const portIndex = buildModulePortIndex();
 
   wires.forEach((wire) => {
-    const start = getPortPositionByRef(wire.from);
-    const end = getPortPositionByRef(wire.to);
+    const start = getPortPositionByRef(wire.from, portIndex);
+    const end = getPortPositionByRef(wire.to, portIndex);
     if (!start || !end) {
       return;
     }
@@ -77,7 +113,7 @@ export function collectWireRenderItems(wires = state.wires) {
     renderItemMap.set(wire.id, item);
   });
 
-  return { renderItems, bendPointMap, renderItemMap };
+  return { renderItems, bendPointMap, renderItemMap, portIndex };
 }
 
 /**
@@ -302,7 +338,9 @@ export function setWireSmartBends(wire) {
 
   const smartRoute = computeSmartRoute(wire, start, end);
   if (smartRoute) {
-    wire.bends = smartRoute.map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) }));
+    wire.bends = smartRoute
+      .slice(0, DIAGRAM_LIMITS.bendsPerWire)
+      .map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) }));
   }
 }
 
@@ -320,6 +358,9 @@ function getDefaultWireRoute(from, to) {
 }
 
 export function createWire(from, to, selectCallback) {
+  if (state.wires.length >= DIAGRAM_LIMITS.wires) {
+    return null;
+  }
   const wire = {
     id: uid("wire"),
     from,
@@ -340,6 +381,7 @@ export function createWire(from, to, selectCallback) {
   if (selectCallback) {
     selectCallback({ type: "wire", id: wire.id });
   }
+  return wire;
 }
 
 /**
@@ -350,15 +392,148 @@ export function syncSvgSize() {
   wireLayer.setAttribute("height", canvas.clientHeight);
 }
 
+function patchWireGeometry(wire, portIndex = null) {
+  const entry = wire && wireDomEntries.get(wire.id);
+  if (!entry || !wire) {
+    return false;
+  }
+
+  const describeRef = (ref) => describePortRefWithIndex(ref, portIndex);
+
+  const hasLabel = Boolean(wire.label);
+  if (hasLabel !== Boolean(entry.label)) {
+    return false;
+  }
+
+  const isSelected = state.selection && state.selection.type === "wire" && state.selection.id === wire.id;
+  const strokeColor = typeof wire.color === "string" && wire.color ? wire.color : DEFAULT_WIRE.color;
+  const baseWidth = Number.isFinite(wire.width) ? wire.width : DEFAULT_WIRE.width;
+  const dash = WIRE_STYLES[wire.style] || "";
+  entry.hitPath.setAttribute("stroke-width", Math.max(24, baseWidth + 16));
+  entry.hitPath.setAttribute(
+    "aria-label",
+    wire.label
+      ? `Wire ${wire.label}, ${describeRef(wire.from)} to ${describeRef(wire.to)}`
+      : `Wire, ${describeRef(wire.from)} to ${describeRef(wire.to)}`
+  );
+  entry.path.setAttribute("stroke", strokeColor);
+  entry.path.setAttribute("stroke-width", isSelected ? baseWidth + 1 : baseWidth);
+  if (dash) {
+    entry.path.setAttribute("stroke-dasharray", dash);
+  } else {
+    entry.path.removeAttribute("stroke-dasharray");
+  }
+
+  const start = getPortPositionByRef(wire.from, portIndex);
+  const end = getPortPositionByRef(wire.to, portIndex);
+  if (!start || !end) {
+    return false;
+  }
+
+  entry.hitPath.setAttribute("d", buildWirePath(wire, start, end));
+  entry.path.setAttribute("d", buildWirePath(wire, start, end));
+  if (entry.label) {
+    entry.label.textContent = wire.label;
+    entry.label.setAttribute("fill", strokeColor);
+    applyWireLabelGeometry(entry.label, wireLabelPosition(wire, start, end));
+  }
+
+  const bendPoints = getWireBendPoints(wire, start, end);
+  if (bendPoints.length !== entry.bendMarkers.length) {
+    entry.bendMarkers.forEach((marker) => marker.remove());
+    entry.bendMarkers = bendPoints.map((point) => {
+      const marker = svgEl("circle", {
+        cx: point.x,
+        cy: point.y,
+        r: Math.max(BEND_MARKER_MIN_RADIUS, baseWidth * 0.7),
+        class: "wire-bend",
+        fill: strokeColor,
+      });
+      if (wireHandleLayer && typeof wireLayer.insertBefore === "function") {
+        wireLayer.insertBefore(marker, wireHandleLayer);
+      } else {
+        wireLayer.appendChild(marker);
+      }
+      return marker;
+    });
+  }
+  bendPoints.forEach((point, index) => {
+    const marker = entry.bendMarkers[index];
+    const overlapBoost = marker.classList.contains("overlap") ? BEND_MARKER_OVERLAP_BOOST : 0;
+    marker.setAttribute("cx", point.x);
+    marker.setAttribute("cy", point.y);
+    marker.setAttribute("fill", strokeColor);
+    marker.setAttribute("r", Math.max(BEND_MARKER_MIN_RADIUS, baseWidth * 0.7) + overlapBoost);
+  });
+
+  const handlePositions = getWireHandlePositions(wire, start, end);
+  if (entry.handles.length > 0 && handlePositions.length !== entry.handles.length) {
+    return false;
+  }
+  if (entry.handles.length > 0) {
+    handlePositions.forEach((position, index) => {
+      entry.handles[index].setAttribute("cx", position.x);
+      entry.handles[index].setAttribute("cy", position.y);
+    });
+  }
+  return true;
+}
+
+/**
+ * Patch only the geometry for one already-rendered wire. This is used during
+ * drag gestures; a full render on pointerup recomputes overlap markers.
+ */
+export function updateWireGeometry(wireId) {
+  const wire = state.wires.find((item) => item.id === wireId);
+  return patchWireGeometry(wire);
+}
+
+export function updateWiresForModule(moduleId) {
+  if (wireDomEntries.size !== state.wires.length) {
+    return false;
+  }
+  let updated = true;
+  const portIndex = buildModulePortIndex();
+  state.wires.forEach((wire) => {
+    if (wire.from.moduleId === moduleId || wire.to.moduleId === moduleId) {
+      updated = patchWireGeometry(wire, portIndex) && updated;
+    }
+  });
+  return updated;
+}
+
+export function updateConnectionPreview() {
+  if (!state.connecting || !state.connecting.cursor || !connectionPreviewElement) {
+    return false;
+  }
+  const start = getPortPositionByRef(state.connecting.from);
+  if (!start) {
+    return false;
+  }
+  const fromSide = getPortByRef(state.connecting.from)?.port.side;
+  connectionPreviewElement.setAttribute(
+    "d",
+    buildConnectionPreviewPath(start, state.connecting.cursor, fromSide)
+  );
+  return true;
+}
+
 /**
  * 更新连线渲染
  */
 export function updateWires(selectCallback, startWireDragCallback) {
   syncSvgSize();
   wireLayer.innerHTML = "";
+  wireDomEntries.clear();
+  connectionPreviewElement = null;
+  wireHandleLayer = null;
 
-  const { renderItems, bendPointMap, renderItemMap } = collectWireRenderItems();
+  const { renderItems, bendPointMap, renderItemMap, portIndex } = collectWireRenderItems();
   const overlapKeys = computeWireOverlapKeys(renderItems, bendPointMap, renderItemMap);
+  const hitLayer = svgEl("g", { class: "wire-hit-layer" });
+  const handleLayer = svgEl("g", { class: "wire-handle-layer" });
+  wireHandleLayer = handleLayer;
+  wireLayer.appendChild(hitLayer);
 
   renderItems.forEach(({ wire, start, end, bendPoints }) => {
     const isSelected = state.selection && state.selection.type === "wire" && state.selection.id === wire.id;
@@ -368,15 +543,37 @@ export function updateWires(selectCallback, startWireDragCallback) {
     const dash = WIRE_STYLES[wire.style] || "";
     const pathAttrs = {
       d: buildWirePath(wire, start, end),
-      class: `wire wire-hit${isSelected ? " selected" : ""}`,
+      class: `wire wire-visual${isSelected ? " selected" : ""}`,
       stroke: strokeColor,
       "stroke-width": strokeWidth,
     };
     if (dash) {
       pathAttrs["stroke-dasharray"] = dash;
     }
+    const hitPath = svgEl("path", {
+      d: pathAttrs.d,
+      class: "wire-hit",
+      fill: "none",
+      stroke: "transparent",
+      "stroke-width": Math.max(24, baseWidth + 16),
+      "vector-effect": "non-scaling-stroke",
+      tabindex: 0,
+      role: "button",
+      "data-wire-id": wire.id,
+      "aria-pressed": isSelected ? "true" : "false",
+      "aria-label": wire.label
+        ? `Wire ${wire.label}, ${describePortRefWithIndex(wire.from, portIndex)} to ${describePortRefWithIndex(wire.to, portIndex)}`
+        : `Wire, ${describePortRefWithIndex(wire.from, portIndex)} to ${describePortRefWithIndex(wire.to, portIndex)}`,
+    });
     const path = svgEl("path", pathAttrs);
-    path.addEventListener("pointerdown", (event) => {
+    const domEntry = {
+      hitPath,
+      path,
+      label: null,
+      bendMarkers: [],
+      handles: [],
+    };
+    hitPath.addEventListener("pointerdown", (event) => {
       if (event.button !== 0) {
         return;
       }
@@ -385,6 +582,19 @@ export function updateWires(selectCallback, startWireDragCallback) {
         selectCallback({ type: "wire", id: wire.id });
       }
     });
+    hitPath.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      if (selectCallback) {
+        selectCallback({ type: "wire", id: wire.id });
+      }
+    });
+    hitPath.addEventListener("focus", () => path.classList.add("keyboard-focus"));
+    hitPath.addEventListener("blur", () => path.classList.remove("keyboard-focus"));
+    hitLayer.appendChild(hitPath);
     wireLayer.appendChild(path);
 
     if (bendPoints.length > 0) {
@@ -399,6 +609,7 @@ export function updateWires(selectCallback, startWireDragCallback) {
           class: `wire-bend${isOverlap ? " overlap" : ""}`,
           fill: strokeColor,
         });
+        domEntry.bendMarkers.push(marker);
         wireLayer.appendChild(marker);
       });
     }
@@ -418,6 +629,7 @@ export function updateWires(selectCallback, startWireDragCallback) {
       }
       const label = svgEl("text", labelAttrs);
       label.textContent = wire.label;
+      domEntry.label = label;
       label.addEventListener("pointerdown", (event) => {
         if (event.button !== 0) {
           return;
@@ -440,6 +652,7 @@ export function updateWires(selectCallback, startWireDragCallback) {
           r: 6,
           class: `wire-handle ${isHorizontalHandle ? "horizontal" : "vertical"}`,
         });
+        domEntry.handles.push(handle);
         handle.addEventListener("pointerdown", (event) => {
           if (event.button !== 0) {
             return;
@@ -450,26 +663,25 @@ export function updateWires(selectCallback, startWireDragCallback) {
             startWireDragCallback(event, wire, pos.index, pos.segmentIndex, pos.isHorizontal);
           }
         });
-        wireLayer.appendChild(handle);
+        handleLayer.appendChild(handle);
       });
     }
+    wireDomEntries.set(wire.id, domEntry);
   });
+
+  wireLayer.appendChild(handleLayer);
 
   if (state.connecting && state.connecting.cursor) {
     const start = getPortPositionByRef(state.connecting.from);
     if (start) {
       const end = state.connecting.cursor;
       const fromSide = getPortByRef(state.connecting.from)?.port.side;
-      const isVerticalPreview = isVerticalPortSide(fromSide);
-      const midX = (start.x + end.x) / 2;
-      const midY = (start.y + end.y) / 2;
-      const previewPath = isVerticalPreview
-        ? `M ${start.x} ${start.y} L ${start.x} ${midY} L ${end.x} ${midY} L ${end.x} ${end.y}`
-        : `M ${start.x} ${start.y} L ${midX} ${start.y} L ${midX} ${end.y} L ${end.x} ${end.y}`;
+      const previewPath = buildConnectionPreviewPath(start, end, fromSide);
       const preview = svgEl("path", {
         d: previewPath,
         class: "wire preview",
       });
+      connectionPreviewElement = preview;
       wireLayer.appendChild(preview);
     }
   }

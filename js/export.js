@@ -36,9 +36,14 @@ import {
   BEND_MARKER_OVERLAP_BOOST
 } from './wire.js';
 import { ensureMuxPorts, isKnownModuleType } from './module.js';
-import { countModuleTypes, normalizeDiagram, normalizeModuleImports } from './diagram-normalize.js';
+import {
+  DIAGRAM_SCHEMA_VERSION,
+  countModuleTypes,
+  normalizeDiagram,
+  normalizeModuleImports
+} from './diagram-normalize.js';
 
-export { normalizeDiagram, normalizeModuleImports } from './diagram-normalize.js';
+export { DIAGRAM_SCHEMA_VERSION, normalizeDiagram, normalizeModuleImports } from './diagram-normalize.js';
 
 const MODULE_STROKE_COLORS = {
   alu: "rgba(242, 193, 78, 0.8)",
@@ -52,7 +57,67 @@ const DEFAULT_STROKE_COLOR = "rgba(31, 38, 43, 0.18)";
 const STORAGE_KEY = "corecat-diagram";
 const AUTO_SAVE_DELAY = 250;
 let autoSaveTimer = null;
+let hasUnsavedChanges = false;
+let documentRevision = 0;
 const PORT_COLOR_MIX_RATIO = 0.5;
+const PNG_MIN_SCALE = 2;
+const PNG_MAX_SCALE = 4;
+const PNG_MAX_DIMENSION = 16384;
+const PNG_MAX_PIXELS = 64 * 1024 * 1024;
+
+function emitStorageStatus(detail, defer = false) {
+  if (
+    typeof window === "undefined" ||
+    typeof window.dispatchEvent !== "function" ||
+    typeof CustomEvent !== "function"
+  ) {
+    return;
+  }
+  const dispatch = () => {
+    window.dispatchEvent(new CustomEvent("corecat:storage-status", { detail }));
+  };
+  if (defer && typeof window.setTimeout === "function") {
+    window.setTimeout(dispatch, 0);
+  } else {
+    dispatch();
+  }
+}
+
+function reportPngExportFailure(message, error) {
+  if (error) {
+    console.error("CoreCat PNG export failed:", error);
+  }
+  if (typeof alert === "function") {
+    alert(message);
+  }
+}
+
+function resolvePngOutputSize(width, height, scale) {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return { ok: false, message: "PNG export has invalid dimensions." };
+  }
+
+  const pixelWidth = Math.ceil(width * scale);
+  const pixelHeight = Math.ceil(height * scale);
+  const pixelCount = pixelWidth * pixelHeight;
+  if (
+    !Number.isSafeInteger(pixelWidth) ||
+    !Number.isSafeInteger(pixelHeight) ||
+    pixelWidth <= 0 ||
+    pixelHeight <= 0 ||
+    pixelWidth > PNG_MAX_DIMENSION ||
+    pixelHeight > PNG_MAX_DIMENSION ||
+    !Number.isSafeInteger(pixelCount) ||
+    pixelCount > PNG_MAX_PIXELS
+  ) {
+    return {
+      ok: false,
+      message: `PNG export is too large (${pixelWidth} x ${pixelHeight} px). Reduce the diagram size or export SVG instead.`,
+    };
+  }
+
+  return { ok: true, pixelWidth, pixelHeight };
+}
 
 function resolvePortLabelSize() {
   const range = PORT_LABEL_SIZE_RANGE || { min: 8, max: 32 };
@@ -72,6 +137,25 @@ function reportNormalizeIssues(result, silent) {
   if (!silent && result.errors.length > 0) {
     alert(result.errors[0]);
   }
+  if (
+    !silent &&
+    result.errors.length === 0 &&
+    result.warnings.length > 0 &&
+    typeof window !== "undefined" &&
+    typeof window.dispatchEvent === "function" &&
+    typeof CustomEvent === "function"
+  ) {
+    const dispatchWarning = () => {
+      window.dispatchEvent(new CustomEvent("corecat:import-warning", {
+        detail: { warnings: [...result.warnings] },
+      }));
+    };
+    if (typeof window.setTimeout === "function") {
+      window.setTimeout(dispatchWarning, 0);
+    } else {
+      dispatchWarning();
+    }
+  }
 }
 
 /**
@@ -80,8 +164,13 @@ function reportNormalizeIssues(result, silent) {
 export function saveDiagramToStorage() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeState()));
+    hasUnsavedChanges = false;
+    return { ok: true };
   } catch (err) {
-    // Ignore storage errors (e.g., private mode or quota exceeded).
+    hasUnsavedChanges = true;
+    const error = err instanceof Error ? err : new Error(String(err));
+    console.error("CoreCat diagram save failed:", error);
+    return { ok: false, error };
   }
 }
 
@@ -89,13 +178,34 @@ export function saveDiagramToStorage() {
  * 计划自动保存
  */
 export function scheduleAutoSave(delay = AUTO_SAVE_DELAY) {
+  documentRevision += 1;
+  hasUnsavedChanges = true;
   if (autoSaveTimer) {
     clearTimeout(autoSaveTimer);
   }
   autoSaveTimer = setTimeout(() => {
     autoSaveTimer = null;
-    saveDiagramToStorage();
+    const result = saveDiagramToStorage();
+    emitStorageStatus({ source: "autosave", ...result });
   }, delay);
+}
+
+export function getDocumentRevision() {
+  return documentRevision;
+}
+
+/**
+ * Persist any pending autosave immediately, for example during pagehide.
+ */
+export function flushAutoSave() {
+  if (!autoSaveTimer && !hasUnsavedChanges) {
+    return { ok: true, skipped: true };
+  }
+  if (autoSaveTimer) {
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = null;
+  }
+  return saveDiagramToStorage();
 }
 
 /**
@@ -106,6 +216,8 @@ export function loadDiagramFromStorage(callbacks) {
   try {
     raw = localStorage.getItem(STORAGE_KEY);
   } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    emitStorageStatus({ source: "restore", ok: false, error }, true);
     return false;
   }
   if (!raw) {
@@ -115,23 +227,39 @@ export function loadDiagramFromStorage(callbacks) {
   try {
     data = JSON.parse(raw);
   } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    emitStorageStatus({ source: "restore", ok: false, error }, true);
     return false;
   }
-  return loadState(data, callbacks, { silent: true });
+  const loaded = loadState(data, callbacks, { silent: true });
+  if (!loaded) {
+    emitStorageStatus({
+      source: "restore",
+      ok: false,
+      error: new Error("Stored diagram data is invalid or exceeds current limits."),
+    }, true);
+  }
+  return loaded;
 }
 
 /**
  * 清理本地存储
  */
 export function clearDiagramStorage() {
+  documentRevision += 1;
   if (autoSaveTimer) {
     clearTimeout(autoSaveTimer);
     autoSaveTimer = null;
   }
+  hasUnsavedChanges = false;
   try {
     localStorage.removeItem(STORAGE_KEY);
+    return { ok: true };
   } catch (err) {
-    // Ignore storage errors.
+    hasUnsavedChanges = true;
+    const error = err instanceof Error ? err : new Error(String(err));
+    console.error("CoreCat diagram clear failed:", error);
+    return { ok: false, error };
   }
 }
 
@@ -456,40 +584,98 @@ export function exportSvg() {
  * 导出PNG
  */
 export function exportPng() {
-  const result = buildExportSvg({
-    transparent: state.export.transparent,
-    fitToBounds: state.export.fitToBounds,
-  });
-  const svgBlob = new Blob([result.svg], { type: "image/svg+xml;charset=utf-8" });
-  const url = URL.createObjectURL(svgBlob);
-  const img = new Image();
-  img.onload = () => {
-    const scale = Math.max(2, window.devicePixelRatio || 1);
-    const exportCanvas = document.createElement("canvas");
-    exportCanvas.width = Math.round(result.width * scale);
-    exportCanvas.height = Math.round(result.height * scale);
-    const ctx = exportCanvas.getContext("2d");
-    if (!ctx) {
+  let result;
+  try {
+    result = buildExportSvg({
+      transparent: state.export.transparent,
+      fitToBounds: state.export.fitToBounds,
+    });
+  } catch (error) {
+    reportPngExportFailure("Failed to prepare PNG export.", error);
+    return false;
+  }
+
+  const deviceScale = Number.isFinite(window.devicePixelRatio) ? window.devicePixelRatio : 1;
+  const scale = Math.min(PNG_MAX_SCALE, Math.max(PNG_MIN_SCALE, deviceScale));
+  const outputSize = resolvePngOutputSize(result.width, result.height, scale);
+  if (!outputSize.ok) {
+    reportPngExportFailure(outputSize.message);
+    return false;
+  }
+
+  let url;
+  let img;
+  try {
+    const svgBlob = new Blob([result.svg], { type: "image/svg+xml;charset=utf-8" });
+    url = URL.createObjectURL(svgBlob);
+    img = new Image();
+  } catch (error) {
+    if (url) {
       URL.revokeObjectURL(url);
-      return;
     }
-    ctx.setTransform(scale, 0, 0, scale, 0, 0);
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
-    ctx.clearRect(0, 0, result.width, result.height);
-    ctx.drawImage(img, 0, 0);
-    exportCanvas.toBlob((blob) => {
-      if (blob) {
-        downloadBlob(blob, "corecat-diagram.png");
-      }
+    reportPngExportFailure("Failed to initialize PNG export.", error);
+    return false;
+  }
+
+  let urlRevoked = false;
+  const revokeUrl = () => {
+    if (!urlRevoked) {
+      urlRevoked = true;
       URL.revokeObjectURL(url);
-    }, "image/png");
+    }
+  };
+
+  img.onload = () => {
+    try {
+      const exportCanvas = document.createElement("canvas");
+      exportCanvas.width = outputSize.pixelWidth;
+      exportCanvas.height = outputSize.pixelHeight;
+      const ctx = exportCanvas.getContext("2d");
+      if (!ctx) {
+        revokeUrl();
+        reportPngExportFailure("PNG export is not supported by this browser.");
+        return;
+      }
+      ctx.setTransform(scale, 0, 0, scale, 0, 0);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.clearRect(0, 0, result.width, result.height);
+      ctx.drawImage(img, 0, 0);
+      if (typeof exportCanvas.toBlob !== "function") {
+        revokeUrl();
+        reportPngExportFailure("PNG export is not supported by this browser.");
+        return;
+      }
+      exportCanvas.toBlob((blob) => {
+        try {
+          if (!blob) {
+            reportPngExportFailure("Failed to encode PNG image.");
+            return;
+          }
+          downloadBlob(blob, "corecat-diagram.png");
+        } catch (error) {
+          reportPngExportFailure("Failed to download PNG image.", error);
+        } finally {
+          revokeUrl();
+        }
+      }, "image/png");
+    } catch (error) {
+      revokeUrl();
+      reportPngExportFailure("Failed to render PNG image.", error);
+    }
   };
   img.onerror = () => {
-    URL.revokeObjectURL(url);
-    alert("Failed to export PNG.");
+    revokeUrl();
+    reportPngExportFailure("Failed to export PNG.");
   };
-  img.src = url;
+  try {
+    img.src = url;
+  } catch (error) {
+    revokeUrl();
+    reportPngExportFailure("Failed to load PNG export image.", error);
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -497,6 +683,7 @@ export function exportPng() {
  */
 export function serializeState() {
   return {
+    schemaVersion: DIAGRAM_SCHEMA_VERSION,
     canvasBackground: state.canvasBackground,
     portLabelSize: state.portLabelSize,
     wireSnapMode: state.wireSnapMode,
@@ -520,17 +707,24 @@ export function serializeState() {
         name: port.name,
         side: port.side,
         offset: port.offset,
+        clock: port.clock === true,
       })),
     })),
     wires: state.wires.map((wire) => ({
       id: wire.id,
-      from: wire.from,
-      to: wire.to,
+      from: wire.from && typeof wire.from === "object"
+        ? { moduleId: wire.from.moduleId, portId: wire.from.portId }
+        : wire.from,
+      to: wire.to && typeof wire.to === "object"
+        ? { moduleId: wire.to.moduleId, portId: wire.to.portId }
+        : wire.to,
       label: wire.label,
       labelAt: wire.labelAt,
       route: wire.route,
       bend: wire.bend,
-      bends: wire.bends,
+      bends: Array.isArray(wire.bends)
+        ? wire.bends.map((bend) => ({ x: bend.x, y: bend.y }))
+        : wire.bends,
       color: wire.color,
       width: wire.width,
       style: wire.style,
@@ -543,10 +737,19 @@ export function serializeState() {
  */
 export function refreshIdCounter() {
   let maxId = 0;
+  const usedSuffixes = new Set();
   const track = (id) => {
+    if (typeof id !== "string") {
+      return;
+    }
     const match = /-(\d+)$/.exec(id);
-    if (match) {
-      maxId = Math.max(maxId, Number.parseInt(match[1], 10));
+    if (!match) {
+      return;
+    }
+    const suffix = Number(match[1]);
+    if (Number.isSafeInteger(suffix) && suffix >= 0) {
+      usedSuffixes.add(suffix);
+      maxId = Math.max(maxId, suffix);
     }
   };
   state.modules.forEach((mod) => {
@@ -554,7 +757,11 @@ export function refreshIdCounter() {
     mod.ports.forEach((port) => track(port.id));
   });
   state.wires.forEach((wire) => track(wire.id));
-  state.nextId = maxId + 1;
+  let nextId = maxId < Number.MAX_SAFE_INTEGER ? maxId + 1 : 1;
+  while (usedSuffixes.has(nextId)) {
+    nextId += 1;
+  }
+  state.nextId = nextId;
 }
 
 /**
@@ -578,6 +785,9 @@ export function loadState(data, callbacks, options = {}) {
   state.typeCounts = countModuleTypes(state.modules);
   state.selection = null;
   state.connecting = null;
+  state.drag = null;
+  state.dragWire = null;
+  state.pan = null;
   refreshIdCounter();
   state.modules.forEach((mod) => {
     if (mod.type === "mux") {

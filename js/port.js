@@ -50,15 +50,40 @@ export function getPortPosition(mod, port) {
   };
 }
 
-export function getPortByRef(ref) {
+/**
+ * Build an immutable-for-the-call lookup used by bulk wire geometry work.
+ * The state arrays remain the source of truth; this only removes repeated
+ * linear scans while processing one render pass.
+ */
+export function buildModulePortIndex(modules = state.modules) {
+  const moduleById = new Map();
+  const portsByModuleId = new Map();
+
+  modules.forEach((mod) => {
+    moduleById.set(mod.id, mod);
+    portsByModuleId.set(
+      mod.id,
+      new Map((Array.isArray(mod.ports) ? mod.ports : []).map((port) => [port.id, port]))
+    );
+  });
+
+  return { moduleById, portsByModuleId };
+}
+
+export function getPortByRef(ref, index = null) {
   if (!ref || typeof ref !== "object") {
     return null;
   }
-  const mod = getModuleById(ref.moduleId);
+  const mod = index && index.moduleById
+    ? index.moduleById.get(ref.moduleId)
+    : getModuleById(ref.moduleId);
   if (!mod) {
     return null;
   }
-  const port = getPortById(mod, ref.portId);
+  const portMap = index && index.portsByModuleId
+    ? index.portsByModuleId.get(ref.moduleId)
+    : null;
+  const port = portMap ? portMap.get(ref.portId) : getPortById(mod, ref.portId);
   if (!port) {
     return null;
   }
@@ -68,8 +93,8 @@ export function getPortByRef(ref) {
 /**
  * 通过引用获取端口位置
  */
-export function getPortPositionByRef(ref) {
-  const portRef = getPortByRef(ref);
+export function getPortPositionByRef(ref, index = null) {
+  const portRef = getPortByRef(ref, index);
   if (!portRef) {
     return null;
   }

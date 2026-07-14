@@ -55,8 +55,36 @@ export function throttle(fn, delay) {
 /**
  * 生成唯一ID
  */
+let fallbackUidCounter = 0n;
+
+function fallbackUidSuffix(cryptoApi) {
+  fallbackUidCounter += 1n;
+  if (cryptoApi && typeof cryptoApi.getRandomValues === "function") {
+    try {
+      const words = new Uint32Array(4);
+      cryptoApi.getRandomValues(words);
+      const random = Array.from(words, (word) => word.toString(36).padStart(7, "0")).join("");
+      return `${random}-${fallbackUidCounter.toString(36)}`;
+    } catch (err) {
+      // Fall through to the timestamp + BigInt counter fallback.
+    }
+  }
+  const timestamp = Date.now().toString(36);
+  const counter = fallbackUidCounter.toString(36);
+  const random = Math.random().toString(36).slice(2, 12);
+  return `${timestamp}-${counter}-${random}`;
+}
+
 export function uid(prefix) {
-  return `${prefix}-${state.nextId++}`;
+  const cryptoApi = typeof globalThis !== "undefined" ? globalThis.crypto : null;
+  if (cryptoApi && typeof cryptoApi.randomUUID === "function") {
+    try {
+      return `${prefix}-${cryptoApi.randomUUID()}`;
+    } catch (err) {
+      // Some non-secure/embedded contexts expose crypto but reject randomUUID.
+    }
+  }
+  return `${prefix}-${fallbackUidSuffix(cryptoApi)}`;
 }
 
 /**

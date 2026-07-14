@@ -4,18 +4,32 @@
 
 .port {
   position: absolute;
-  width: 12px;
-  height: 12px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--module-stroke) 50%, black);
+  background: transparent;
   cursor: crosshair;
+  touch-action: none;
   /* 让圆心对准坐标点 */
   transform: translate(calc(-50% - 3px), calc(-50% - 3px));
 }
 
-.port:hover {
-  /* hover 时保持居中，同时放大 */
-  transform: translate(calc(-50% - 3px), calc(-50% - 3px)) scale(1.2);
+.port::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--module-stroke) 50%, black);
+  transform: translate(-50%, -50%);
+  transition: transform 120ms ease;
+}
+
+.port:hover::before,
+.port:focus-visible::before {
+  transform: translate(-50%, -50%) scale(1.25);
 }
 
 .port.clock-port {

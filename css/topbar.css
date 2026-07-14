@@ -78,12 +78,6 @@
   font-size: 12px;
   color: rgba(255, 255, 255, 0.7);
   z-index: 1;
-  cursor: pointer;
-  transition: color 120ms ease;
-}
-
-.status:hover {
-  color: rgba(255, 255, 255, 0.95);
 }
 
 /* Dropdown export menu */
@@ -121,8 +115,12 @@
   padding: 5px 10px 5px;
 }
 
-.dropdown-export:hover .dropdown-menu {
+.dropdown-export.is-open .dropdown-menu {
   display: flex;
+}
+
+.dropdown-export>button[aria-expanded="true"] {
+  background: rgba(255, 255, 255, 0.22);
 }
 
 .dropdown-menu button {
@@ -141,4 +139,9 @@
 
 .dropdown-menu button:hover {
   background: rgba(242, 193, 78, 0.15);
+}
+
+.dropdown-menu button:focus-visible {
+  background: rgba(242, 193, 78, 0.22);
+  outline-offset: -3px;
 }

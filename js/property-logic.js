@@ -2,14 +2,14 @@
  * Property logic - state mutations used by the properties panel without DOM work.
  */
 
-import { MODULE_LIBRARY, DEFAULT_MODULE, MUX_DEFAULT } from './constants.js';
-import { uid, clamp, ensureMuxGeometry } from './utils.js';
+import { MODULE_LIBRARY, DEFAULT_MODULE, MUX_DEFAULT, DIAGRAM_LIMITS } from './constants.js';
+import { state } from './state.js';
+import { uid, clamp, ensureMuxGeometry, isClockPort } from './utils.js';
 import { ensureMuxPorts } from './module.js';
 import { setWireDefaultBend, setWireSmartBends } from './wire.js';
 
 export function getPortSideOptions(mod, port) {
-  const isClockPort = mod.type === "reg" && (port.clock === true || port.name === "CLK");
-  if (isClockPort) {
+  if (isClockPort(mod, port)) {
     return [
       { value: "top", label: "Top" },
       { value: "bottom", label: "Bottom" },
@@ -30,23 +30,57 @@ export function resetModuleStyle(mod) {
 }
 
 export function setModuleType(mod, value) {
+  if (!mod || !Object.prototype.hasOwnProperty.call(MODULE_LIBRARY, value)) {
+    return null;
+  }
+
+  const previousType = mod.type;
   mod.type = value;
   if (value === "mux") {
     mod.muxInputs = MUX_DEFAULT.inputs;
     mod.muxControlSide = MUX_DEFAULT.controlSide;
-    mod.ports = [];
-    ensureMuxPorts(mod);
+    return ensureMuxPorts(mod) ? mod : null;
   }
+
+  if (previousType === "mux") {
+    delete mod.muxInputs;
+    delete mod.muxControlSide;
+  }
+
+  const ports = Array.isArray(mod.ports) ? mod.ports : [];
+  ports.forEach((port) => {
+    if (port.side === "slopeTop") {
+      port.side = "top";
+    } else if (port.side === "slopeBottom") {
+      port.side = "bottom";
+    }
+    if (isClockPort(mod, port) && port.side !== "top" && port.side !== "bottom") {
+      port.side = "bottom";
+    }
+  });
+  mod.ports = ports.slice(0, DIAGRAM_LIMITS.portsPerModule);
+
+  const allowedPortIds = new Set(mod.ports.map((port) => port.id));
+  state.wires = state.wires.filter((wire) => {
+    if (wire.from.moduleId === mod.id && !allowedPortIds.has(wire.from.portId)) {
+      return false;
+    }
+    if (wire.to.moduleId === mod.id && !allowedPortIds.has(wire.to.portId)) {
+      return false;
+    }
+    return true;
+  });
+  return mod;
 }
 
 export function setMuxInputs(mod, value) {
   mod.muxInputs = clamp(Math.round(value), 2, 8);
-  ensureMuxPorts(mod);
+  return ensureMuxPorts(mod);
 }
 
 export function setMuxControlSide(mod, value) {
   mod.muxControlSide = value;
-  ensureMuxPorts(mod);
+  return ensureMuxPorts(mod);
 }
 
 export function setModuleWidth(mod, value) {
@@ -72,6 +106,9 @@ export function setModuleHeight(mod, value) {
 }
 
 export function addPort(mod, createId = uid) {
+  if (!mod || !Array.isArray(mod.ports) || mod.ports.length >= DIAGRAM_LIMITS.portsPerModule) {
+    return null;
+  }
   const port = {
     id: createId("port"),
     name: `P${mod.ports.length + 1}`,
@@ -84,7 +121,11 @@ export function addPort(mod, createId = uid) {
 
 export function removePort(mod, wires, portId) {
   mod.ports = mod.ports.filter((item) => item.id !== portId);
-  return wires.filter((wire) => wire.from.portId !== portId && wire.to.portId !== portId);
+  return wires.filter((wire) => {
+    const leavesRemovedPort = wire.from.moduleId === mod.id && wire.from.portId === portId;
+    const entersRemovedPort = wire.to.moduleId === mod.id && wire.to.portId === portId;
+    return !leavesRemovedPort && !entersRemovedPort;
+  });
 }
 
 export function deleteModule(modules, wires, moduleId) {

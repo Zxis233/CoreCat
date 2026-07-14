@@ -11,18 +11,17 @@ import {
   DEFAULT_PORT_LABEL_SIZE,
   PORT_LABEL_SIZE_RANGE,
   DEFAULT_WIRE_SNAP_MODE,
-  WIRE_SNAP_MODES
+  WIRE_SNAP_MODES,
+  DIAGRAM_LIMITS
 } from './constants.js';
 import { sanitizeSvgPaint, uid } from './utils.js';
 import { isKnownModuleType } from './module.js';
 
+export const DIAGRAM_SCHEMA_VERSION = 1;
+
 const NORMALIZE_LIMITS = {
-  modules: 500,
-  wires: 2000,
-  portsPerModule: 128,
-  bendsPerWire: 64,
+  ...DIAGRAM_LIMITS,
   idLength: 128,
-  textLength: 256,
   colorLength: 128,
   coordinate: 100000,
   moduleSize: 5000,
@@ -102,6 +101,9 @@ function normalizePorts(rawPorts, libraryPorts, moduleType, moduleId, warnings) 
     }
 
     const fallbackName = `P${index + 1}`;
+    if (typeof rawPort.name === "string" && rawPort.name.length > NORMALIZE_LIMITS.textLength) {
+      addNormalizeWarning(warnings, `${moduleId} port ${index + 1} name was truncated.`);
+    }
     const name = normalizeString(rawPort.name, fallbackName);
     const isClock = rawPort.clock === true || String(name).toUpperCase() === "CLK";
     let side = normalizePortSide(rawPort.side, "left", moduleType, warnings, `${moduleId}:${name}`);
@@ -138,6 +140,9 @@ function normalizeModule(rawModule, index, usedModuleIds, warnings) {
   }
   const library = MODULE_LIBRARY[type];
   const id = normalizeId(rawModule.id, "mod", usedModuleIds, warnings, `Module ${index + 1}`);
+  if (typeof rawModule.name === "string" && rawModule.name.length > NORMALIZE_LIMITS.textLength) {
+    addNormalizeWarning(warnings, `Module ${index + 1} name was truncated.`);
+  }
 
   const moduleItem = {
     id,
@@ -210,6 +215,9 @@ function normalizeWire(rawWire, index, usedWireIds, modulePortsById, warnings) {
     addNormalizeWarning(warnings, `${id} was ignored because it references a missing module or port.`);
     return null;
   }
+  if (typeof rawWire.label === "string" && rawWire.label.length > NORMALIZE_LIMITS.textLength) {
+    addNormalizeWarning(warnings, `${id} label was truncated.`);
+  }
 
   return {
     id,
@@ -250,16 +258,42 @@ export function normalizeDiagram(data) {
     errors.push("Invalid diagram data.");
     return { ok: false, diagram: null, errors, warnings };
   }
+
+  const hasSchemaVersion = Object.prototype.hasOwnProperty.call(data, "schemaVersion");
+  const schemaVersion = hasSchemaVersion ? data.schemaVersion : 0;
+  if (!Number.isSafeInteger(schemaVersion) || schemaVersion < 0) {
+    errors.push("Invalid diagram schemaVersion.");
+    return { ok: false, diagram: null, errors, warnings };
+  }
+  if (schemaVersion > DIAGRAM_SCHEMA_VERSION) {
+    errors.push(
+      `Diagram schema version ${schemaVersion} is newer than supported version ${DIAGRAM_SCHEMA_VERSION}.`
+    );
+    return { ok: false, diagram: null, errors, warnings };
+  }
+  if (schemaVersion !== 0 && schemaVersion !== DIAGRAM_SCHEMA_VERSION) {
+    errors.push(`Unsupported diagram schema version ${schemaVersion}.`);
+    return { ok: false, diagram: null, errors, warnings };
+  }
   if (!Array.isArray(data.modules) || !Array.isArray(data.wires)) {
     errors.push("Invalid diagram data: modules and wires must be arrays.");
     return { ok: false, diagram: null, errors, warnings };
   }
 
   if (data.modules.length > NORMALIZE_LIMITS.modules) {
-    addNormalizeWarning(warnings, "Diagram has too many modules; extra modules were ignored.");
+    errors.push(`Diagram exceeds the ${NORMALIZE_LIMITS.modules} module limit.`);
   }
   if (data.wires.length > NORMALIZE_LIMITS.wires) {
-    addNormalizeWarning(warnings, "Diagram has too many wires; extra wires were ignored.");
+    errors.push(`Diagram exceeds the ${NORMALIZE_LIMITS.wires} wire limit.`);
+  }
+  if (data.modules.some((mod) => mod && Array.isArray(mod.ports) && mod.ports.length > NORMALIZE_LIMITS.portsPerModule)) {
+    errors.push(`A module exceeds the ${NORMALIZE_LIMITS.portsPerModule} port limit.`);
+  }
+  if (data.wires.some((wire) => wire && Array.isArray(wire.bends) && wire.bends.length > NORMALIZE_LIMITS.bendsPerWire)) {
+    errors.push(`A wire exceeds the ${NORMALIZE_LIMITS.bendsPerWire} bend-point limit.`);
+  }
+  if (errors.length > 0) {
+    return { ok: false, diagram: null, errors, warnings };
   }
 
   const usedModuleIds = new Set();
@@ -277,6 +311,7 @@ export function normalizeDiagram(data) {
   return {
     ok: true,
     diagram: {
+      schemaVersion: DIAGRAM_SCHEMA_VERSION,
       canvasBackground: sanitizeSvgPaint(normalizeString(data.canvasBackground, "", NORMALIZE_LIMITS.colorLength), ""),
       portLabelSize: normalizeNumber(
         data.portLabelSize,

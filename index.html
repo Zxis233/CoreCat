@@ -19,45 +19,51 @@
 <body>
   <div class="app">
     <header class="topbar">
-      <a class="logo">
-        <img src="svg/CoreCat_T.png" alt="GitHub">
-      </a>
+      <div class="logo" aria-hidden="true">
+        <img src="svg/CoreCat_T.png" alt="">
+      </div>
       <div class="brand">
         <div class="brand-title">CoreCat Circuit Blocks <span id="commit-hash" class="commit-hash"></span></div>
         <div class="brand-sub"><i>Drag modules, edit ports, connect wires, and fxxk Visio.</i></div>
       </div>
       <div class="actions">
         <div class="dropdown-export">
-          <button id="btn-demo-menu">Demo</button>
-          <div class="dropdown-menu">
-            <button id="btn-demo-escuterv">EsCute</button>
-            <button id="btn-demo-lfsr">LFSR</button>
+          <button id="btn-demo-menu" type="button" aria-haspopup="menu" aria-expanded="false"
+            aria-controls="menu-demo">Demo</button>
+          <div id="menu-demo" class="dropdown-menu" role="menu" aria-labelledby="btn-demo-menu">
+            <button id="btn-demo-escuterv" type="button" role="menuitem" tabindex="-1">EsCute</button>
+            <button id="btn-demo-lfsr" type="button" role="menuitem" tabindex="-1">LFSR</button>
           </div>
         </div>
-        <button id="btn-save">Save</button>
+        <button id="btn-zoom-out" type="button" aria-label="Zoom out" title="Zoom out">Zoom −</button>
+        <button id="btn-zoom-in" type="button" aria-label="Zoom in" title="Zoom in">Zoom +</button>
+        <button id="btn-reset-view" type="button" title="Reset zoom and pan">Reset View</button>
+        <button id="btn-save" type="button">Save</button>
         <!-- <button id="btn-load">Load</button> -->
         <!-- <button id="btn-import">Import JSON</button>
         <button id="btn-import-module">Import Module</button> -->
         <div class="dropdown-export">
-          <button id="btn-import-menu">Import</button>
-          <div class="dropdown-menu">
-            <button id="btn-import-module">Import Module</button>
-            <button id="btn-import">Import JSON</button>
+          <button id="btn-import-menu" type="button" aria-haspopup="menu" aria-expanded="false"
+            aria-controls="menu-import">Import</button>
+          <div id="menu-import" class="dropdown-menu" role="menu" aria-labelledby="btn-import-menu">
+            <button id="btn-import-module" type="button" role="menuitem" tabindex="-1">Import Module</button>
+            <button id="btn-import" type="button" role="menuitem" tabindex="-1">Import JSON</button>
           </div>
         </div>
         <div class="dropdown-export">
-          <button id="btn-export-pic">Export</button>
-          <div class="dropdown-menu">
-            <button id="btn-export-png">Export PNG</button>
-            <button id="btn-export-svg">Export SVG</button>
-            <button id="btn-bg-toggle">BG: Solid</button>
-            <button id="btn-export">Export JSON</button>
+          <button id="btn-export-pic" type="button" aria-haspopup="menu" aria-expanded="false"
+            aria-controls="menu-export">Export</button>
+          <div id="menu-export" class="dropdown-menu" role="menu" aria-labelledby="btn-export-pic">
+            <button id="btn-export-png" type="button" role="menuitem" tabindex="-1">Export PNG</button>
+            <button id="btn-export-svg" type="button" role="menuitem" tabindex="-1">Export SVG</button>
+            <button id="btn-bg-toggle" type="button" role="menuitem" tabindex="-1">BG: Solid</button>
+            <button id="btn-export" type="button" role="menuitem" tabindex="-1">Export JSON</button>
           </div>
         </div>
-        <button id="btn-clear" class="danger">Clear</button>
+        <button id="btn-clear" type="button" class="danger">Clear</button>
 
       </div>
-      <div id="status" class="status">Ready</div>
+      <div id="status" class="status" role="status" aria-live="polite" aria-atomic="true">Ready</div>
       <a class="github-link" href="https://github.com/Zxis233/CoreCat" target="_blank" rel="noopener noreferrer"
         aria-label="GitHub" style="padding: 4px 0 0 0;">
         <img src="svg/github-svgrepo-com.svg" alt="GitHub" width="32" height="32">
@@ -66,13 +72,13 @@
     <div class="layout">
       <aside class="panel palette">
         <h2>Palette</h2>
-        <div class="palette-items">
-          <div class="palette-item alu" draggable="true" data-type="alu">ALU</div>
-          <div class="palette-item reg" draggable="true" data-type="reg">Clocked Register</div>
-          <div class="palette-item seq" draggable="true" data-type="seq">Sequence</div>
-          <div class="palette-item combo" draggable="true" data-type="combo">Combinational</div>
-          <div class="palette-item extender" draggable="true" data-type="extender">Extender</div>
-          <div class="palette-item mux" draggable="true" data-type="mux">MUX</div>
+        <div class="palette-items" aria-label="Module palette">
+          <div class="palette-item alu" role="button" tabindex="0" draggable="true" data-type="alu">ALU</div>
+          <div class="palette-item reg" role="button" tabindex="0" draggable="true" data-type="reg">Clocked Register</div>
+          <div class="palette-item seq" role="button" tabindex="0" draggable="true" data-type="seq">Sequence</div>
+          <div class="palette-item combo" role="button" tabindex="0" draggable="true" data-type="combo">Combinational</div>
+          <div class="palette-item extender" role="button" tabindex="0" draggable="true" data-type="extender">Extender</div>
+          <div class="palette-item mux" role="button" tabindex="0" draggable="true" data-type="mux">MUX</div>
         </div>
         <div class="hint">
           Click a port, then click another port to connect.
@@ -80,9 +86,9 @@
         </div>
       </aside>
       <main class="workspace">
-        <div id="canvas" class="canvas">
-          <svg id="wire-layer"></svg>
-          <div id="module-layer"></div>
+        <div id="canvas" class="canvas" role="region" aria-label="Circuit diagram canvas" tabindex="0">
+          <svg id="wire-layer" aria-label="Diagram wires"></svg>
+          <div id="module-layer" role="group" aria-label="Diagram modules"></div>
         </div>
       </main>
       <aside class="panel properties">
@@ -92,16 +98,17 @@
     </div>
   </div>
 
-  <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title"
+    aria-hidden="true" tabindex="-1">
     <div class="modal-card">
       <div class="modal-header">
         <h3 id="modal-title">Export</h3>
       </div>
-      <textarea id="modal-text" spellcheck="false"></textarea>
+      <textarea id="modal-text" spellcheck="false" aria-label="Diagram JSON"></textarea>
       <div class="modal-actions">
-        <button id="modal-copy" class="primary">Copy</button>
-        <button id="modal-close" class="danger">Close</button>
-        <button id="modal-apply" class="primary">Apply</button>
+        <button id="modal-copy" type="button" class="primary">Copy</button>
+        <button id="modal-close" type="button" class="danger">Close</button>
+        <button id="modal-apply" type="button" class="primary">Apply</button>
       </div>
     </div>
   </div>

@@ -4,12 +4,13 @@
  */
 
 import { state, moduleLayer, moduleElements } from './state.js';
-import { MODULE_LIBRARY, DEFAULT_MODULE, MUX_DEFAULT } from './constants.js';
+import { MODULE_LIBRARY, DEFAULT_MODULE, MUX_DEFAULT, DIAGRAM_LIMITS } from './constants.js';
 import { uid, isClockPort, ensureMuxGeometry, buildMuxSvgBackground, buildExtenderSvgBackground } from './utils.js';
 import { getPortLocalPosition } from './port.js';
 
 // 模块层事件委托处理器引用
 let moduleLayerDelegatedHandler = null;
+let moduleLayerKeyboardHandler = null;
 
 export function isKnownModuleType(type) {
   return typeof type === "string" && Object.prototype.hasOwnProperty.call(MODULE_LIBRARY, type);
@@ -38,14 +39,21 @@ export function applyModuleAppearance(el, mod) {
  * 确保MUX端口配置正确
  */
 export function ensureMuxPorts(mod) {
+  if (!mod || typeof mod !== "object") {
+    return null;
+  }
+  const maxInputs = Math.min(8, DIAGRAM_LIMITS.portsPerModule - 2);
+  if (maxInputs < 2) {
+    return null;
+  }
   const inputs = Math.round(mod.muxInputs || MUX_DEFAULT.inputs);
-  const clampedInputs = Math.max(2, Math.min(8, inputs));
+  const clampedInputs = Math.max(2, Math.min(maxInputs, inputs));
   const controlSide = mod.muxControlSide === "bottom" ? "bottom" : MUX_DEFAULT.controlSide;
   mod.muxInputs = clampedInputs;
   mod.muxControlSide = controlSide;
 
   const existingByName = new Map();
-  mod.ports.forEach((port) => existingByName.set(port.name, port));
+  (Array.isArray(mod.ports) ? mod.ports : []).forEach((port) => existingByName.set(port.name, port));
 
   const ports = [];
   for (let i = 0; i < clampedInputs; i += 1) {
@@ -87,19 +95,35 @@ export function ensureMuxPorts(mod) {
   });
 
   mod.ports = ports;
+  return ports;
 }
 
 /**
  * 创建模块
  */
 export function createModule(type, x, y, selectCallback) {
+  if (state.modules.length >= DIAGRAM_LIMITS.modules) {
+    return null;
+  }
   const moduleType = resolveModuleType(type);
   const library = MODULE_LIBRARY[moduleType];
-  const count = (state.typeCounts[moduleType] = (state.typeCounts[moduleType] || 0) + 1);
+  const requiredPortCount = moduleType === "mux"
+    ? MUX_DEFAULT.inputs + 2
+    : library.ports.length;
+  if (requiredPortCount > DIAGRAM_LIMITS.portsPerModule) {
+    return null;
+  }
+  let count = state.typeCounts[moduleType] || 0;
+  let generatedName;
+  do {
+    count += 1;
+    generatedName = `${library.label} ${count}`;
+  } while (state.modules.some((item) => item.name === generatedName));
+  state.typeCounts[moduleType] = count;
   const moduleItem = {
     id: uid("mod"),
     type: moduleType,
-    name: `${library.label} ${count}`,
+    name: generatedName,
     x: Math.round(x),
     y: Math.round(y),
     width: library.width,
@@ -119,12 +143,15 @@ export function createModule(type, x, y, selectCallback) {
     moduleItem.muxInputs = MUX_DEFAULT.inputs;
     moduleItem.muxControlSide = MUX_DEFAULT.controlSide;
     moduleItem.ports = [];
-    ensureMuxPorts(moduleItem);
+    if (!ensureMuxPorts(moduleItem)) {
+      return null;
+    }
   }
   state.modules.push(moduleItem);
   if (selectCallback) {
     selectCallback({ type: "module", id: moduleItem.id });
   }
+  return moduleItem;
 }
 
 /**
@@ -182,6 +209,11 @@ function createModuleElement(mod) {
   // Set height after ensureModuleDefaults and ensureMuxGeometry which may modify mod.height
   el.style.height = `${mod.height}px`;
   applyModuleAppearance(el, mod);
+  el.tabIndex = 0;
+  el.setAttribute("role", "group");
+  el.setAttribute("aria-roledescription", "circuit module");
+  el.setAttribute("aria-current", isSelected ? "true" : "false");
+  el.setAttribute("aria-label", `${mod.name || MODULE_LIBRARY[mod.type]?.label || "Module"}, ${mod.ports.length} ports`);
 
   // Create module header
   const header = document.createElement("div");
@@ -203,9 +235,6 @@ function createModuleElement(mod) {
   // 创建端口
   mod.ports.forEach((port) => {
     const clockPort = isClockPort(mod, port);
-    if (clockPort && port.side !== "top" && port.side !== "bottom") {
-      port.side = "bottom";
-    }
     const local = getPortLocalPosition(mod, port);
     const portEl = document.createElement("div");
     portEl.className = clockPort ? "port clock-port" : "port";
@@ -213,6 +242,9 @@ function createModuleElement(mod) {
     portEl.style.top = `${local.y}px`;
     portEl.dataset.portId = port.id;
     portEl.dataset.moduleId = mod.id;
+    portEl.tabIndex = 0;
+    portEl.setAttribute("role", "button");
+    portEl.setAttribute("aria-label", `${mod.name || "Module"} port ${port.name || "unnamed"}`);
 
     el.appendChild(portEl);
 
@@ -238,6 +270,22 @@ function createModuleElement(mod) {
 }
 
 /**
+ * Replace one module node while keeping the delegated layer listener intact.
+ * Returns false when a full render is required (for example, a new module).
+ */
+export function renderModule(moduleId) {
+  const mod = state.modules.find((item) => item.id === moduleId);
+  const existing = moduleElements.get(moduleId);
+  if (!mod || !existing || typeof existing.replaceWith !== "function") {
+    return false;
+  }
+  const replacement = createModuleElement(mod);
+  existing.replaceWith(replacement);
+  moduleElements.set(moduleId, replacement);
+  return true;
+}
+
+/**
  * 渲染所有模块
  * 使用DocumentFragment批量操作DOM以提高性能
  */
@@ -246,6 +294,10 @@ export function renderModules(selectCallback, startModuleDragCallback, handlePor
   if (moduleLayerDelegatedHandler) {
     moduleLayer.removeEventListener("pointerdown", moduleLayerDelegatedHandler);
     moduleLayerDelegatedHandler = null;
+  }
+  if (moduleLayerKeyboardHandler) {
+    moduleLayer.removeEventListener("keydown", moduleLayerKeyboardHandler);
+    moduleLayerKeyboardHandler = null;
   }
 
   moduleLayer.innerHTML = "";
@@ -300,5 +352,33 @@ export function renderModules(selectCallback, startModuleDragCallback, handlePor
     }
   };
 
+  moduleLayerKeyboardHandler = (event) => {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+    const portEl = event.target.closest(".port");
+    const moduleEl = event.target.closest(".module");
+    if (!moduleEl) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const mod = state.modules.find((item) => item.id === moduleEl.dataset.id);
+    if (!mod) {
+      return;
+    }
+    if (portEl && handlePortClickCallback) {
+      const port = mod.ports.find((item) => item.id === portEl.dataset.portId);
+      if (port) {
+        handlePortClickCallback(event, mod, port);
+      }
+      return;
+    }
+    if (selectCallback) {
+      selectCallback({ type: "module", id: mod.id });
+    }
+  };
+
   moduleLayer.addEventListener("pointerdown", moduleLayerDelegatedHandler);
+  moduleLayer.addEventListener("keydown", moduleLayerKeyboardHandler);
 }

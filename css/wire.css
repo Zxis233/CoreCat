@@ -4,7 +4,26 @@
 
 path.wire {
   fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+path.wire-visual {
+  pointer-events: none;
+}
+
+path.wire-hit {
+  fill: none;
   pointer-events: stroke;
+  cursor: pointer;
+}
+
+path.wire-hit:focus-visible {
+  outline: none;
+}
+
+path.wire-visual.keyboard-focus {
+  filter: drop-shadow(0 0 5px rgba(242, 193, 78, 0.95));
 }
 
 path.wire.selected {
@@ -15,6 +34,7 @@ path.wire.preview {
   stroke: var(--wire-muted);
   stroke-width: 2.5;
   stroke-dasharray: 4 6;
+  pointer-events: none;
 }
 
 text.wire-label {
@@ -29,6 +49,7 @@ circle.wire-handle {
   stroke: #1d262b;
   stroke-width: 2;
   cursor: ew-resize;
+  touch-action: none;
 }
 
 circle.wire-handle.horizontal {
@@ -47,4 +68,14 @@ circle.wire-bend {
 circle.wire-bend.overlap {
   stroke-width: 2;
   opacity: 1;
+}
+
+@media (pointer: coarse) {
+  circle.wire-handle {
+    r: 12px;
+  }
+
+  text.wire-label {
+    font-size: 14px;
+  }
 }

@@ -3,13 +3,17 @@
  * Keeps the last configured changes plus the current state.
  */
 
-import { HISTORY_MAX_STEPS } from './constants.js';
+import { HISTORY_MAX_BYTES, HISTORY_MAX_STEPS } from './constants.js';
 import { state } from './state.js';
 import { serializeState, loadState } from './export.js';
 
 const MAX_HISTORY = Math.max(
   1,
   Math.round(Number.isFinite(HISTORY_MAX_STEPS) ? HISTORY_MAX_STEPS : 0) + 1
+);
+const MAX_HISTORY_BYTES = Math.max(
+  1024 * 1024,
+  Number.isFinite(HISTORY_MAX_BYTES) ? HISTORY_MAX_BYTES : 0
 );
 const COALESCED_HISTORY_DELAY = 600;
 let undoStack = [];
@@ -40,14 +44,33 @@ function isValidSelection(selection) {
 }
 
 function makeSnapshot() {
+  // serializeState is the codec boundary and returns a detached object graph.
+  // Avoid cloning it a second time on every property input/history record.
   const data = serializeState();
   const typeCounts = { ...state.typeCounts };
+  const signature = JSON.stringify({ data, typeCounts });
   return {
     data,
     typeCounts,
     selection: state.selection ? { ...state.selection } : null,
-    signature: JSON.stringify({ data, typeCounts }),
+    signature,
+    // Approximate UTF-16 signature + detached object graph overhead.
+    estimatedBytes: signature.length * 4,
   };
+}
+
+function trimHistoryStack(stack, minimumEntries = 1) {
+  let estimatedBytes = stack.reduce(
+    (total, snapshot) => total + (snapshot.estimatedBytes || snapshot.signature.length * 4),
+    0
+  );
+  while (
+    stack.length > minimumEntries &&
+    (stack.length > MAX_HISTORY || estimatedBytes > MAX_HISTORY_BYTES)
+  ) {
+    const removed = stack.shift();
+    estimatedBytes -= removed.estimatedBytes || removed.signature.length * 4;
+  }
 }
 
 function pushSnapshot(snapshot) {
@@ -61,9 +84,7 @@ function pushSnapshot(snapshot) {
     return;
   }
   undoStack.push(snapshot);
-  if (undoStack.length > MAX_HISTORY) {
-    undoStack.shift();
-  }
+  trimHistoryStack(undoStack, 2);
   redoStack = [];
 }
 
@@ -126,6 +147,7 @@ export function recordCoalescedHistory(delay = COALESCED_HISTORY_DELAY) {
 
   if (isCoalescingHistory && undoStack.length > 0) {
     replaceCoalescedSnapshot(snapshot);
+    trimHistoryStack(undoStack, 2);
   } else {
     pushSnapshot(snapshot);
     const current = undoStack[undoStack.length - 1];
@@ -147,12 +169,16 @@ export function undoHistory(callbacks) {
   }
   stopCoalescingHistory();
   isRestoring = true;
-  const current = undoStack.pop();
-  redoStack.push(current);
-  const snapshot = undoStack[undoStack.length - 1];
-  restoreSnapshot(snapshot, callbacks);
-  isRestoring = false;
-  return true;
+  try {
+    const current = undoStack.pop();
+    redoStack.push(current);
+    trimHistoryStack(redoStack, 1);
+    const snapshot = undoStack[undoStack.length - 1];
+    restoreSnapshot(snapshot, callbacks);
+    return true;
+  } finally {
+    isRestoring = false;
+  }
 }
 
 export function redoHistory(callbacks) {
@@ -161,9 +187,12 @@ export function redoHistory(callbacks) {
   }
   stopCoalescingHistory();
   isRestoring = true;
-  const snapshot = redoStack.pop();
-  undoStack.push(snapshot);
-  restoreSnapshot(snapshot, callbacks);
-  isRestoring = false;
-  return true;
+  try {
+    const snapshot = redoStack.pop();
+    undoStack.push(snapshot);
+    restoreSnapshot(snapshot, callbacks);
+    return true;
+  } finally {
+    isRestoring = false;
+  }
 }

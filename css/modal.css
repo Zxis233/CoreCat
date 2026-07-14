@@ -10,6 +10,7 @@
   align-items: center;
   justify-content: center;
   z-index: 10;
+  overscroll-behavior: contain;
 }
 
 .modal.hidden {
@@ -18,6 +19,7 @@
 
 .modal-card {
   width: min(720px, 90vw);
+  max-height: min(720px, calc(100dvh - 32px));
   background: #fff;
   border-radius: 16px;
   padding: 18px;
@@ -25,6 +27,12 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.modal-card textarea {
+  min-height: 180px;
+  flex: 1 1 auto;
+  overflow: auto;
 }
 
 .modal-header h3 {

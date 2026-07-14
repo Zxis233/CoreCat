@@ -63,13 +63,31 @@ button:active {
   transform: translateY(1px);
 }
 
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
 button.primary {
   background: var(--accent);
   color: #1d262b;
 }
 
 button.danger {
-  background: rgba(224, 122, 95, 0.85);
+  background: #9f432f;
+  color: #fff;
+}
+
+:where(button, a[href], input, select, textarea, [role="button"], [tabindex]):focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 5px var(--ink);
+}
+
+.app .btn-accent {
+  background: #2f685f;
+  color: #fff;
 }
 
 input,
@@ -92,4 +110,15 @@ textarea {
   min-height: 180px;
   resize: vertical;
   font-family: "Maple Mono Normal NF CN", "Maple Mono NF CN", "Consolas", "Courier New", monospace;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

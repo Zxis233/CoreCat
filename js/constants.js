@@ -110,7 +110,22 @@ export const WIRE_SNAP_MODES = {
 };
 export const DEFAULT_WIRE_SNAP_MODE = WIRE_SNAP_MODES.GRID_AND_PORT;
 
-export const HISTORY_MAX_STEPS = 5;
+// Shared authoring/import capacity limits. Creation paths must reject new
+// entities once these limits are reached so a saved diagram can be loaded
+// without silently dropping data.
+export const DIAGRAM_LIMITS = Object.freeze({
+  modules: 500,
+  wires: 2000,
+  portsPerModule: 128,
+  bendsPerWire: 64,
+  textLength: 256,
+});
+
+// Guard JSON.parse from allocating unbounded data on the main thread.
+export const MAX_IMPORT_JSON_LENGTH = 64 * 1024 * 1024;
+
+export const HISTORY_MAX_STEPS = 25;
+export const HISTORY_MAX_BYTES = 32 * 1024 * 1024;
 
 export const WIRE_STYLES = {
   solid: "",
