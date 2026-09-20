@@ -33,6 +33,7 @@ import {
   setModuleWidth,
   setMuxControlSide,
   setMuxInputs,
+  setPortSide,
   setWireRoute,
 } from './property-logic.js';
 
@@ -373,6 +374,7 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
           setMuxControlSide(mod, value);
           renderModulesCallback({ immediate: true });
           updateWiresCallback({ immediate: true });
+          renderPropertiesCallback();
         }
       )
     );
@@ -444,9 +446,12 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
 
     const sideOptions = getPortSideOptions(mod, port);
     const sideSelect = makeSelect(sideOptions, port.side, (value) => {
-      port.side = value;
+      setPortSide(mod, port, value);
       renderModulesCallback({ immediate: true });
       updateWiresCallback({ immediate: true });
+      if (mod.type === "mux") {
+        renderPropertiesCallback();
+      }
     });
     sideSelect.setAttribute("aria-label", `Port ${portIndex + 1} side`);
 

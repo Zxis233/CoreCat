@@ -29,7 +29,7 @@ const { state } = await import("../js/state.js");
 const { uid } = await import("../js/utils.js");
 const { createModule, ensureMuxPorts } = await import("../js/module.js");
 const { buildModulePortIndex, getPortByRef } = await import("../js/port.js");
-const { addPort, getPortSideOptions, removePort, setModuleType } = await import("../js/property-logic.js");
+const { addPort, getPortSideOptions, removePort, setModuleType, setMuxControlSide, setMuxInputs, setPortSide } = await import("../js/property-logic.js");
 const { collectWireRenderItems, createWire } = await import("../js/wire.js");
 
 beforeEach(() => {
@@ -140,6 +140,34 @@ test("seq clock ports use shared case-insensitive clock rules", () => {
     { name: "clk", clock: false, side: "left" }
   ).map((option) => option.value);
   assert.deepEqual(values, ["top", "bottom"]);
+});
+
+test("mux control side edits stay on the slope and preserve connected ports", () => {
+  const mod = createModule("mux", 0, 0);
+  const other = createModule("combo", 300, 0);
+  const sel = mod.ports.find((port) => port.name === "Sel");
+  const wire = createWire(
+    { moduleId: other.id, portId: other.ports[0].id },
+    { moduleId: mod.id, portId: sel.id }
+  );
+  assert.ok(getPortSideOptions(mod, sel).some((option) => option.value === sel.side));
+  sel.offset = 0.7;
+  setPortSide(mod, sel, "slopeBottom");
+  assert.equal(sel.side, "slopeBottom");
+  assert.equal(mod.muxControlSide, "bottom");
+  assert.equal(sel.offset, 0.7);
+  setPortSide(mod, sel, "left");
+  assert.equal(sel.side, "slopeBottom");
+
+  setMuxInputs(mod, 3);
+  let currentSel = getPortByRef(wire.to).port;
+  assert.equal(currentSel.side, "slopeBottom");
+  assert.equal(currentSel.id, sel.id);
+  setMuxControlSide(mod, "top");
+  currentSel = getPortByRef(wire.to).port;
+  assert.equal(currentSel.side, "slopeTop");
+  assert.ok(getPortSideOptions(mod, currentSel).some((option) => option.value === currentSel.side));
+  assert.equal(state.wires[0], wire);
 });
 
 test("removePort only removes wires for the matching module and port pair", () => {

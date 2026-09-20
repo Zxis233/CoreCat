@@ -9,6 +9,12 @@ import { ensureMuxPorts } from './module.js';
 import { setWireDefaultBend, setWireSmartBends } from './wire.js';
 
 export function getPortSideOptions(mod, port) {
+  if (mod.type === "mux" && (port.name === "Sel" || port.side === "slopeTop" || port.side === "slopeBottom")) {
+    return [
+      { value: "slopeTop", label: "Top slope" },
+      { value: "slopeBottom", label: "Bottom slope" },
+    ];
+  }
   if (isClockPort(mod, port)) {
     return [
       { value: "top", label: "Top" },
@@ -21,6 +27,16 @@ export function getPortSideOptions(mod, port) {
     { value: "top", label: "Top" },
     { value: "bottom", label: "Bottom" },
   ];
+}
+
+export function setPortSide(mod, port, value) {
+  if (!getPortSideOptions(mod, port).some((option) => option.value === value)) {
+    return;
+  }
+  port.side = value;
+  if (mod.type === "mux" && port.name === "Sel") {
+    mod.muxControlSide = value === "slopeBottom" ? "bottom" : "top";
+  }
 }
 
 export function resetModuleStyle(mod) {
