@@ -7,6 +7,7 @@ import { state } from './state.js';
 import { uid, clamp, ensureMuxGeometry, isClockPort } from './utils.js';
 import { ensureMuxPorts } from './module.js';
 import { setWireDefaultBend, setWireSmartBends } from './wire.js';
+import { routeMode } from './wire-routing.js';
 
 export function getPortSideOptions(mod, port) {
   if (mod.type === "mux" && (port.name === "Sel" || port.side === "slopeTop" || port.side === "slopeBottom")) {
@@ -156,6 +157,7 @@ export function deleteWire(wires, wireId) {
 }
 
 export function setWireRoute(wire, value) {
+  if (routeMode(wire) !== 'simple') return;
   wire.route = value;
   setWireDefaultBend(wire);
   wire.bends = null;
@@ -167,9 +169,7 @@ export function resetWireToSimpleRoute(wire) {
 }
 
 export function recomputeWireSmartRoute(wire) {
-  wire.bends = null;
-  setWireDefaultBend(wire);
-  setWireSmartBends(wire);
+  return setWireSmartBends(wire);
 }
 
 export function getModuleTypeOptions() {

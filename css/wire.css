@@ -30,6 +30,10 @@ path.wire.selected {
   filter: drop-shadow(0 0 4px rgba(242, 193, 78, 0.75));
 }
 
+path.wire.route-conflict {
+  filter: drop-shadow(0 0 3px #d85a32);
+}
+
 path.wire.preview {
   stroke: var(--wire-muted);
   stroke-width: 2.5;

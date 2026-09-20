@@ -16,8 +16,9 @@ import {
 } from './constants.js';
 import { sanitizeSvgPaint, uid } from './utils.js';
 import { isKnownModuleType } from './module.js';
+import { getPortPosition } from './port.js';
 
-export const DIAGRAM_SCHEMA_VERSION = 1;
+export const DIAGRAM_SCHEMA_VERSION = 2;
 
 const NORMALIZE_LIMITS = {
   ...DIAGRAM_LIMITS,
@@ -148,10 +149,10 @@ function normalizeModule(rawModule, index, usedModuleIds, warnings) {
     id,
     type,
     name: normalizeString(rawModule.name, library.label),
-    x: normalizeNumber(rawModule.x, 0, -NORMALIZE_LIMITS.coordinate, NORMALIZE_LIMITS.coordinate, true),
-    y: normalizeNumber(rawModule.y, 0, -NORMALIZE_LIMITS.coordinate, NORMALIZE_LIMITS.coordinate, true),
-    width: normalizeNumber(rawModule.width, library.width, 1, NORMALIZE_LIMITS.moduleSize, true),
-    height: normalizeNumber(rawModule.height, library.height, 1, NORMALIZE_LIMITS.moduleSize, true),
+    x: normalizeNumber(rawModule.x, 0, -NORMALIZE_LIMITS.coordinate, NORMALIZE_LIMITS.coordinate),
+    y: normalizeNumber(rawModule.y, 0, -NORMALIZE_LIMITS.coordinate, NORMALIZE_LIMITS.coordinate),
+    width: normalizeNumber(rawModule.width, library.width, 1, NORMALIZE_LIMITS.moduleSize),
+    height: normalizeNumber(rawModule.height, library.height, 1, NORMALIZE_LIMITS.moduleSize),
     nameSize: normalizeNumber(rawModule.nameSize, DEFAULT_MODULE.nameSize, 1, NORMALIZE_LIMITS.nameSize),
     showType: rawModule.showType === undefined ? DEFAULT_MODULE.showType : Boolean(rawModule.showType),
     fill: sanitizeSvgPaint(normalizeString(rawModule.fill, DEFAULT_MODULE.fill, NORMALIZE_LIMITS.colorLength), DEFAULT_MODULE.fill),
@@ -186,20 +187,22 @@ function normalizeWireBends(rawBends, warnings, wireId) {
     return null;
   }
   const bends = [];
+  let invalid = false;
   if (rawBends.length > NORMALIZE_LIMITS.bendsPerWire) {
     addNormalizeWarning(warnings, `${wireId} has too many bend points; extra points were ignored.`);
   }
   rawBends.slice(0, NORMALIZE_LIMITS.bendsPerWire).forEach((rawBend, index) => {
     if (!rawBend || typeof rawBend !== "object" || !Number.isFinite(rawBend.x) || !Number.isFinite(rawBend.y)) {
       addNormalizeWarning(warnings, `${wireId} bend ${index + 1} was ignored because it is invalid.`);
+      invalid = true;
       return;
     }
     bends.push({
-      x: normalizeNumber(rawBend.x, 0, -NORMALIZE_LIMITS.coordinate, NORMALIZE_LIMITS.coordinate, true),
-      y: normalizeNumber(rawBend.y, 0, -NORMALIZE_LIMITS.coordinate, NORMALIZE_LIMITS.coordinate, true),
+      x: normalizeNumber(rawBend.x, 0, -NORMALIZE_LIMITS.coordinate, NORMALIZE_LIMITS.coordinate),
+      y: normalizeNumber(rawBend.y, 0, -NORMALIZE_LIMITS.coordinate, NORMALIZE_LIMITS.coordinate),
     });
   });
-  return bends.length > 0 ? bends : null;
+  return invalid ? null : bends;
 }
 
 function normalizeWire(rawWire, index, usedWireIds, modulePortsById, warnings) {
@@ -219,6 +222,19 @@ function normalizeWire(rawWire, index, usedWireIds, modulePortsById, warnings) {
     addNormalizeWarning(warnings, `${id} label was truncated.`);
   }
 
+  let bends = normalizeWireBends(rawWire.bends, warnings, id);
+  let routingMode = ['simple', 'auto', 'manual'].includes(rawWire.routingMode)
+    ? rawWire.routingMode : (bends?.length ? 'manual' : 'simple');
+  if (routingMode === 'simple' && bends?.length) {
+    routingMode = 'manual';
+    addNormalizeWarning(warnings, `${id} had Simple mode with explicit bends; the geometry was preserved as Manual.`);
+  }
+  if (routingMode !== 'simple' && bends === null) {
+    routingMode = 'simple';
+    addNormalizeWarning(warnings, `${id} has missing or invalid route points; Simple routing was used.`);
+  }
+  if (routingMode === 'simple') bends = null;
+
   return {
     id,
     from,
@@ -226,8 +242,9 @@ function normalizeWire(rawWire, index, usedWireIds, modulePortsById, warnings) {
     label: normalizeString(rawWire.label, ""),
     labelAt: rawWire.labelAt === "start" ? "start" : "end",
     route: rawWire.route === "V" ? "V" : "H",
-    bend: normalizeNumber(rawWire.bend, 0, -NORMALIZE_LIMITS.coordinate, NORMALIZE_LIMITS.coordinate, true),
-    bends: normalizeWireBends(rawWire.bends, warnings, id),
+    routingMode,
+    bend: normalizeNumber(rawWire.bend, 0, -NORMALIZE_LIMITS.coordinate, NORMALIZE_LIMITS.coordinate),
+    bends,
     color: sanitizeSvgPaint(normalizeString(rawWire.color, DEFAULT_WIRE.color, NORMALIZE_LIMITS.colorLength), DEFAULT_WIRE.color),
     width: normalizeNumber(rawWire.width, DEFAULT_WIRE.width, 0.5, NORMALIZE_LIMITS.wireWidth),
     style: WIRE_STYLES[rawWire.style] !== undefined ? rawWire.style : DEFAULT_WIRE.style,
@@ -271,7 +288,7 @@ export function normalizeDiagram(data) {
     );
     return { ok: false, diagram: null, errors, warnings };
   }
-  if (schemaVersion !== 0 && schemaVersion !== DIAGRAM_SCHEMA_VERSION) {
+  if (![0, 1, DIAGRAM_SCHEMA_VERSION].includes(schemaVersion)) {
     errors.push(`Unsupported diagram schema version ${schemaVersion}.`);
     return { ok: false, diagram: null, errors, warnings };
   }
@@ -307,6 +324,19 @@ export function normalizeDiagram(data) {
     .slice(0, NORMALIZE_LIMITS.wires)
     .map((wire, index) => normalizeWire(wire, index, usedWireIds, modulePortsById, warnings))
     .filter(Boolean);
+
+  const modulesById = new Map(modules.map(mod => [mod.id, mod]));
+  for (const wire of wires) {
+    if (wire.routingMode === 'simple' || wire.bends.length) continue;
+    const from = modulesById.get(wire.from.moduleId), to = modulesById.get(wire.to.moduleId);
+    const start = getPortPosition(from, from.ports.find(p => p.id === wire.from.portId));
+    const end = getPortPosition(to, to.ports.find(p => p.id === wire.to.portId));
+    if (start.x !== end.x && start.y !== end.y) {
+      wire.routingMode = 'simple';
+      wire.bends = null;
+      addNormalizeWarning(warnings, `${wire.id} had a non-orthogonal empty route; Simple routing was used.`);
+    }
+  }
 
   return {
     ok: true,

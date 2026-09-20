@@ -8,6 +8,7 @@ import {
   WIRE_SNAP_DISTANCE,
   WIRE_SNAP_MODES,
 } from './constants.js';
+import { moveRouteSegment } from './wire-routing.js';
 
 const HORIZONTAL_PORT_SIDES = new Set(["left", "right"]);
 const VERTICAL_PORT_SIDES = new Set(["top", "bottom", "slopeTop", "slopeBottom"]);
@@ -178,63 +179,29 @@ export function updateWireDragGeometry(wire, dragWire, clientX, clientY, scale) 
   const snapContext = normalizeSnapContext(dragWire.snapContext);
 
   if (dragWire.segmentIndex !== undefined && Array.isArray(wire.bends)) {
-    const segIdx = dragWire.segmentIndex;
-    const isHorizontal = dragWire.isHorizontal;
-    const origins = dragWire.origin;
-    const numBends = wire.bends.length;
-
-    if (isHorizontal) {
-      if (segIdx === 0) {
-        wire.bends[0] = {
-          x: origins[0].x,
-          y: snapHorizontalSegmentY(origins[0].y + dy, snapContext),
-        };
-      } else if (segIdx === numBends) {
-        wire.bends[numBends - 1] = {
-          x: origins[numBends - 1].x,
-          y: snapHorizontalSegmentY(origins[numBends - 1].y + dy, snapContext),
-        };
-      } else {
-        wire.bends[segIdx - 1] = {
-          x: origins[segIdx - 1].x,
-          y: snapHorizontalSegmentY(origins[segIdx - 1].y + dy, snapContext),
-        };
-        wire.bends[segIdx] = {
-          x: origins[segIdx].x,
-          y: snapHorizontalSegmentY(origins[segIdx].y + dy, snapContext),
-        };
-      }
-    } else if (segIdx === 0) {
-      wire.bends[0] = {
-        x: snapVerticalSegmentX(origins[0].x + dx, snapContext),
-        y: origins[0].y,
-      };
-    } else if (segIdx === numBends) {
-      wire.bends[numBends - 1] = {
-        x: snapVerticalSegmentX(origins[numBends - 1].x + dx, snapContext),
-        y: origins[numBends - 1].y,
-      };
-    } else {
-      wire.bends[segIdx - 1] = {
-        x: snapVerticalSegmentX(origins[segIdx - 1].x + dx, snapContext),
-        y: origins[segIdx - 1].y,
-      };
-      wire.bends[segIdx] = {
-        x: snapVerticalSegmentX(origins[segIdx].x + dx, snapContext),
-        y: origins[segIdx].y,
-      };
+    const i = dragWire.segmentIndex, origins = dragWire.origin;
+    // Terminal segments are anchored to their ports.
+    if (!Number.isInteger(i) || i <= 0 || i >= wire.bends.length || !Array.isArray(origins)) return;
+    const axis = dragWire.isHorizontal ? 'y' : 'x';
+    const value = dragWire.isHorizontal
+      ? snapHorizontalSegmentY(origins[i - 1].y + dy, snapContext)
+      : snapVerticalSegmentX(origins[i - 1].x + dx, snapContext);
+    if (dragWire.routeContext) {
+      const context = dragWire.routeContext;
+      const points = moveRouteSegment([context.start, ...origins, context.end], i, value, context);
+      if (!points) return;
+      wire.bends = points.slice(1, -1);
+      if (wire.bends[i - 1][axis] !== origins[i - 1][axis]) wire.routingMode = 'manual';
+      return;
     }
+    wire.bends[i - 1] = { ...origins[i - 1], [axis]: value };
+    wire.bends[i] = { ...origins[i], [axis]: value };
+    if (value !== origins[i - 1][axis]) wire.routingMode = 'manual';
     return;
   }
 
-  if (dragWire.bendIndex >= 0 && Array.isArray(wire.bends)) {
-    const origin = dragWire.origin;
-    wire.bends[dragWire.bendIndex] = snapWirePoint({
-      x: origin.x + dx,
-      y: origin.y + dy,
-    }, snapContext);
-    return;
-  }
+  // Arbitrary point dragging cannot preserve both adjacent segment axes.
+  if (dragWire.bendIndex >= 0) return;
 
   if (dragWire.route === "V") {
     wire.bend = snapHorizontalSegmentY(dragWire.origin + dy, snapContext);

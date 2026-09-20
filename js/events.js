@@ -7,7 +7,8 @@ import { state, canvas, moduleLayer, wireLayer, moduleElements, statusEl } from 
 import { MODULE_LIBRARY, GRID_SIZE, DIAGRAM_LIMITS, MAX_IMPORT_JSON_LENGTH } from './constants.js';
 import { getCanvasPoint, getModuleById, applyCanvasBackground, applyPortLabelSize, clamp, uid, ensureMuxGeometry } from './utils.js';
 import { createModule, renderModule, renderModules, ensureMuxPorts, isKnownModuleType, resolveModuleType } from './module.js';
-import { createWire, updateWires, updateWireGeometry, updateWiresForModule, updateConnectionPreview } from './wire.js';
+import { createWire, updateWires, updateWireGeometry, updateWiresForModule, updateConnectionPreview,
+  captureWireRoutes, restoreWireRoutes, maintainWireRoutes, finishWireEdit, getWireRouteContext } from './wire.js';
 import { renderProperties } from './properties.js';
 import { describePortRef, getPortByRef, getPortPositionByRef } from './port.js';
 import { serializeState, loadState, normalizeModuleImports, exportPng, exportSvg, refreshIdCounter, saveDiagramToStorage, scheduleAutoSave, flushAutoSave, getDocumentRevision, loadDiagramFromStorage, clearDiagramStorage } from './export.js';
@@ -96,8 +97,9 @@ function cancelActiveGesture({ revert = true, render = true } = {}) {
     if (revert) {
       const mod = getModuleById(drag.id);
       if (mod) {
-        mod.x = drag.originX;
-        mod.y = drag.originY;
+        mod.x = drag.initialX;
+        mod.y = drag.initialY;
+        restoreWireRoutes(drag.wireSnapshot);
         modelChanged = true;
       }
     }
@@ -114,6 +116,7 @@ function cancelActiveGesture({ revert = true, render = true } = {}) {
     if (revert) {
       const wire = state.wires.find((item) => item.id === dragWire.id);
       if (wire) {
+        restoreWireRoutes(dragWire.wireSnapshot);
         if (dragWire.segmentIndex !== undefined && Array.isArray(dragWire.origin)) {
           wire.bends = dragWire.origin.map((bend) => ({ ...bend }));
         } else if (dragWire.bendIndex >= 0 && Array.isArray(wire.bends) && dragWire.origin) {
@@ -319,6 +322,7 @@ export function deleteSelected() {
   if (state.selection.type === "wire") {
     state.wires = state.wires.filter((wire) => wire.id !== state.selection.id);
   }
+  maintainWireRoutes();
   state.selection = null;
   state.connecting = null;
   doRenderModules();
@@ -384,14 +388,6 @@ function doUpdateWires() {
 }
 
 function doUpdatePropertyWires(options) {
-  if (
-    state.selection &&
-    state.selection.type === "module" &&
-    !(options && options.immediate) &&
-    updateWiresForModule(state.selection.id)
-  ) {
-    return;
-  }
   if (
     state.selection &&
     state.selection.type === "wire" &&
@@ -510,6 +506,7 @@ function pasteClipboardModule() {
     moduleItem.ports = moduleItem.ports.slice(0, DIAGRAM_LIMITS.portsPerModule);
   }
   state.modules.push(moduleItem);
+  maintainWireRoutes();
   syncTypeCountsFromModules();
   select({ type: "module", id: moduleItem.id });
   recordHistory();
@@ -538,6 +535,7 @@ function nudgeSelectedModule(event) {
   event.preventDefault();
   mod.x = Math.round(mod.x + delta.x);
   mod.y = Math.round(mod.y + delta.y);
+  if (!maintainWireRoutes()) showStatusMessage('Edit canceled: endpoint repair exceeds the bend-point limit.');
 
   const el = moduleElements.get(mod.id);
   if (el) {
@@ -545,7 +543,7 @@ function nudgeSelectedModule(event) {
     el.style.top = `${mod.y}px`;
   }
 
-  scheduleUpdateWires({ moduleId: mod.id });
+  scheduleUpdateWires({ full: true });
   doRenderProperties();
   recordCoalescedHistory();
   scheduleAutoSave();
@@ -592,6 +590,7 @@ function addModulesFromJson(rawText) {
   }
 
   state.modules.push(...newModules);
+  maintainWireRoutes();
   syncTypeCountsFromModules();
   refreshIdCounter();
   state.selection = { type: "module", id: newModules[newModules.length - 1].id };
@@ -654,6 +653,9 @@ function startModuleDrag(event, mod) {
   }
   state.drag = {
     id: mod.id,
+    initialX: mod.x,
+    initialY: mod.y,
+    wireSnapshot: captureWireRoutes(),
     startX: event.clientX,
     startY: event.clientY,
     originX: mod.x,
@@ -684,6 +686,8 @@ function onModuleDrag(event) {
     return;
   }
   updateModuleDragPosition(mod, state.drag, event, state.view.scale);
+  restoreWireRoutes(state.drag.wireSnapshot);
+  state.drag.routeRejected = !maintainWireRoutes({ reroute: false, moduleId: mod.id });
   const el = moduleElements.get(mod.id);
   if (el) {
     el.style.left = `${mod.x}px`;
@@ -699,6 +703,10 @@ function endModuleDrag(event) {
   if (!pointerMatchesSession(state.drag, event)) {
     return;
   }
+  if (event?.type === 'pointercancel' || event?.type === 'blur') {
+    cancelActiveGesture();
+    return;
+  }
   const drag = state.drag;
   state.drag = null;
   releaseSessionPointer(drag);
@@ -706,6 +714,8 @@ function endModuleDrag(event) {
   window.removeEventListener("pointerup", endModuleDragHandler);
   window.removeEventListener("pointercancel", endModuleDragHandler);
   window.removeEventListener("blur", endModuleDragHandler);
+  if (!drag.routeRejected) maintainWireRoutes();
+  else showStatusMessage('Move canceled: endpoint repair exceeds the bend-point limit.');
   doUpdateWires();
   doRenderProperties();
   recordHistory();
@@ -817,6 +827,8 @@ function startWireDrag(event, wire, bendIndex = -1, segmentIndex = undefined, is
 
   state.dragWire = {
     id: wire.id,
+    wireSnapshot: captureWireRoutes(),
+    routeContext: getWireRouteContext(wire),
     route: wire.route,
     bendIndex: bendIndex,
     segmentIndex: segmentIndex,
@@ -861,6 +873,10 @@ function endWireDrag(event) {
   if (!pointerMatchesSession(state.dragWire, event)) {
     return;
   }
+  if (event?.type === 'pointercancel' || event?.type === 'blur') {
+    cancelActiveGesture();
+    return;
+  }
   const dragWire = state.dragWire;
   state.dragWire = null;
   releaseSessionPointer(dragWire);
@@ -868,6 +884,7 @@ function endWireDrag(event) {
   window.removeEventListener("pointerup", endWireDragHandler);
   window.removeEventListener("pointercancel", endWireDragHandler);
   window.removeEventListener("blur", endWireDragHandler);
+  finishWireEdit(state.wires.find(wire => wire.id === dragWire.id));
   doUpdateWires();
   doRenderProperties();
   recordHistory();
@@ -910,6 +927,8 @@ export function initPalette() {
         showStatusMessage(`Module limit reached (${DIAGRAM_LIMITS.modules})`);
         return;
       }
+      maintainWireRoutes();
+      doUpdateWires();
       recordHistory();
       scheduleAutoSave();
     });
@@ -942,6 +961,8 @@ export function initPalette() {
       showStatusMessage(`Module limit reached (${DIAGRAM_LIMITS.modules})`);
       return;
     }
+    maintainWireRoutes();
+    doUpdateWires();
     recordHistory();
     scheduleAutoSave();
   });
@@ -1587,7 +1608,7 @@ export function initWindowEvents() {
   });
   window.addEventListener("pagehide", () => {
     const hadDocumentGesture = Boolean(state.drag || state.dragWire);
-    cancelActiveGesture({ revert: false, render: false });
+    cancelActiveGesture({ revert: true, render: false });
     if (hadDocumentGesture) {
       saveDiagramToStorage();
     } else {

@@ -4,10 +4,11 @@
  */
 
 import { state, wireLayer, canvas } from './state.js';
-import { DEFAULT_WIRE, WIRE_STYLES, WIRE_MARGIN, DIAGRAM_LIMITS } from './constants.js';
+import { DEFAULT_WIRE, WIRE_STYLES, DIAGRAM_LIMITS } from './constants.js';
 import { uid, svgEl } from './utils.js';
 import { buildModulePortIndex, describePortRef, getPortByRef, getPortPositionByRef } from './port.js';
 import { isHorizontalPortSide, isVerticalPortSide } from './interaction-logic.js';
+import { findSmartRoute, moveRouteSegment, repairRoute, routeMode, simplifyRoute, validateRoute } from './wire-routing.js';
 import {
   BEND_MARKER_MIN_RADIUS,
   BEND_MARKER_OVERLAP_BOOST,
@@ -132,216 +133,137 @@ export function setWireDefaultBend(wire) {
   }
   // Reset bends to null for simple routing (can be set later for multi-segment routes)
   wire.bends = null;
+  wire.routingMode = 'simple';
+  delete wire.routeWarning;
 }
 
-/**
- * 获取模块边界框（含边距）
- */
-function getModuleBounds(mod, margin = WIRE_MARGIN) {
+export function getWireRouteContext(wire, portIndex = buildModulePortIndex()) {
+  const from = getPortByRef(wire.from, portIndex), to = getPortByRef(wire.to, portIndex);
+  if (!from || !to) return null;
   return {
-    left: mod.x - margin,
-    right: mod.x + mod.width + margin,
-    top: mod.y - margin,
-    bottom: mod.y + mod.height + margin,
+    start: getPortPositionByRef(wire.from, portIndex), end: getPortPositionByRef(wire.to, portIndex),
+    fromSide: from.port.side, toSide: to.port.side, fromId: from.mod.id, toId: to.mod.id,
+    modules: state.modules, width: wire.width,
   };
 }
 
-/**
- * 检查水平线段是否与矩形相交
- */
-function hLineIntersectsRect(y, x1, x2, rect) {
-  if (y <= rect.top || y >= rect.bottom) return false;
-  const minX = Math.min(x1, x2);
-  const maxX = Math.max(x1, x2);
-  return maxX > rect.left && minX < rect.right;
+// Baselines are transient: restoring a document never triggers a new route search.
+let routeBaselines = new WeakMap();
+let routeScene = null;
+function saveRouteScene() {
+  routeScene = {
+    modules: state.modules.map(mod => ({ mod, data: structuredClone(mod) })),
+    wires: captureWireRoutes(),
+  };
 }
-
-/**
- * 检查垂直线段是否与矩形相交
- */
-function vLineIntersectsRect(x, y1, y2, rect) {
-  if (x <= rect.left || x >= rect.right) return false;
-  const minY = Math.min(y1, y2);
-  const maxY = Math.max(y1, y2);
-  return maxY > rect.top && minY < rect.bottom;
+function terminalSignature(context) {
+  return JSON.stringify([context.start, context.end, context.fromSide, context.toSide]);
 }
-
-/**
- * 获取障碍物模块
- */
-function getObstacleModules(wire, includeEndpoints = false) {
-  if (includeEndpoints) {
-    return state.modules;
+export function rememberWireRoutes() {
+  routeBaselines = new WeakMap();
+  const index = buildModulePortIndex();
+  for (const wire of state.wires) {
+    const context = getWireRouteContext(wire, index);
+    if (context) routeBaselines.set(wire, terminalSignature(context));
   }
-  return state.modules.filter((mod) => mod.id !== wire.from.moduleId && mod.id !== wire.to.moduleId);
+  saveRouteScene();
 }
 
-/**
- * 检查路径碰撞
- */
-function checkPathCollision(wire, start, end) {
-  const allModules = getObstacleModules(wire, true);
-
-  for (const mod of allModules) {
-    const rect = getModuleBounds(mod);
-
-    if (wire.route === "V") {
-      const midY = wire.bend;
-      if (vLineIntersectsRect(start.x, start.y, midY, rect)) return true;
-      if (hLineIntersectsRect(midY, start.x, end.x, rect)) return true;
-      if (vLineIntersectsRect(end.x, midY, end.y, rect)) return true;
-    } else {
-      const midX = wire.bend;
-      if (hLineIntersectsRect(start.y, start.x, midX, rect)) return true;
-      if (vLineIntersectsRect(midX, start.y, end.y, rect)) return true;
-      if (hLineIntersectsRect(end.y, midX, end.x, rect)) return true;
-    }
-  }
-
-  return false;
+export function captureWireRoutes() {
+  return state.wires.map(wire => ({ wire, bend: wire.bend,
+    bends: Array.isArray(wire.bends) ? wire.bends.map(p => ({ ...p })) : wire.bends,
+    routingMode: wire.routingMode, routeWarning: wire.routeWarning,
+    signature: routeBaselines.get(wire) }));
 }
 
-/**
- * 计算智能路由
- */
-function computeSmartRoute(wire, start, end) {
-  const allModules = getObstacleModules(wire, true);
-  if (allModules.length === 0) return null;
-
-  const margin = WIRE_MARGIN;
-
-  const minX = Math.min(start.x, end.x);
-  const maxX = Math.max(start.x, end.x);
-  const minY = Math.min(start.y, end.y);
-  const maxY = Math.max(start.y, end.y);
-
-  const relevantModules = allModules.filter((mod) => {
-    const rect = getModuleBounds(mod, margin);
-    return !(rect.right < minX - margin || rect.left > maxX + margin ||
-      rect.bottom < minY - margin || rect.top > maxY + margin);
-  });
-
-  if (relevantModules.length === 0) return null;
-
-  let combinedLeft = Infinity, combinedRight = -Infinity;
-  let combinedTop = Infinity, combinedBottom = -Infinity;
-
-  for (const mod of relevantModules) {
-    const rect = getModuleBounds(mod, margin);
-    combinedLeft = Math.min(combinedLeft, rect.left);
-    combinedRight = Math.max(combinedRight, rect.right);
-    combinedTop = Math.min(combinedTop, rect.top);
-    combinedBottom = Math.max(combinedBottom, rect.bottom);
-  }
-
-  if (wire.route === "H") {
-    let midX1, midX2;
-
-    if (start.x >= combinedRight - margin) {
-      midX1 = combinedRight + margin;
-    } else if (start.x <= combinedLeft + margin) {
-      midX1 = combinedLeft - margin;
-    } else {
-      const distToRight = combinedRight - start.x;
-      const distToLeft = start.x - combinedLeft;
-      midX1 = distToRight < distToLeft ? combinedRight + margin : combinedLeft - margin;
-    }
-
-    if (end.x >= combinedRight - margin) {
-      midX2 = combinedRight + margin;
-    } else if (end.x <= combinedLeft + margin) {
-      midX2 = combinedLeft - margin;
-    } else {
-      const distToRight = combinedRight - end.x;
-      const distToLeft = end.x - combinedLeft;
-      midX2 = distToRight < distToLeft ? combinedRight + margin : combinedLeft - margin;
-    }
-
-    const topY = combinedTop - margin;
-    const routeAbove = [
-      { x: midX1, y: start.y },
-      { x: midX1, y: topY },
-      { x: midX2, y: topY },
-      { x: midX2, y: end.y },
-    ];
-
-    const bottomY = combinedBottom + margin;
-    const routeBelow = [
-      { x: midX1, y: start.y },
-      { x: midX1, y: bottomY },
-      { x: midX2, y: bottomY },
-      { x: midX2, y: end.y },
-    ];
-
-    const distAbove = Math.abs(topY - start.y) + Math.abs(topY - end.y);
-    const distBelow = Math.abs(bottomY - start.y) + Math.abs(bottomY - end.y);
-
-    return distAbove < distBelow ? routeAbove : routeBelow;
-  } else {
-    let midY1, midY2;
-
-    if (start.y >= combinedBottom - margin) {
-      midY1 = combinedBottom + margin;
-    } else if (start.y <= combinedTop + margin) {
-      midY1 = combinedTop - margin;
-    } else {
-      const distToBottom = combinedBottom - start.y;
-      const distToTop = start.y - combinedTop;
-      midY1 = distToBottom < distToTop ? combinedBottom + margin : combinedTop - margin;
-    }
-
-    if (end.y >= combinedBottom - margin) {
-      midY2 = combinedBottom + margin;
-    } else if (end.y <= combinedTop + margin) {
-      midY2 = combinedTop - margin;
-    } else {
-      const distToBottom = combinedBottom - end.y;
-      const distToTop = end.y - combinedTop;
-      midY2 = distToBottom < distToTop ? combinedBottom + margin : combinedTop - margin;
-    }
-
-    const leftX = combinedLeft - margin;
-    const routeLeft = [
-      { x: start.x, y: midY1 },
-      { x: leftX, y: midY1 },
-      { x: leftX, y: midY2 },
-      { x: end.x, y: midY2 },
-    ];
-
-    const rightX = combinedRight + margin;
-    const routeRight = [
-      { x: start.x, y: midY1 },
-      { x: rightX, y: midY1 },
-      { x: rightX, y: midY2 },
-      { x: end.x, y: midY2 },
-    ];
-
-    const distLeft = Math.abs(leftX - start.x) + Math.abs(leftX - end.x);
-    const distRight = Math.abs(rightX - start.x) + Math.abs(rightX - end.x);
-
-    return distLeft < distRight ? routeLeft : routeRight;
+export function restoreWireRoutes(snapshot) {
+  for (const saved of snapshot || []) {
+    Object.assign(saved.wire, { bend: saved.bend,
+      bends: Array.isArray(saved.bends) ? saved.bends.map(p => ({ ...p })) : saved.bends,
+      routingMode: saved.routingMode, routeWarning: saved.routeWarning });
+    if (saved.signature === undefined) routeBaselines.delete(saved.wire);
+    else routeBaselines.set(saved.wire, saved.signature);
   }
 }
 
-/**
- * 设置智能路由弯折点
- */
-export function setWireSmartBends(wire) {
-  const start = getPortPositionByRef(wire.from);
-  const end = getPortPositionByRef(wire.to);
-  if (!start || !end) return;
+/** Explicit Smart action: only replace the existing route after success. */
+export function setWireSmartBends(wire, { remember = true } = {}) {
+  const context = getWireRouteContext(wire);
+  if (!context) return { ok: false, reason: 'A wire endpoint is missing.' };
+  const result = findSmartRoute(context);
+  if (result.ok) {
+    wire.bends = result.points.slice(1, -1);
+    wire.routingMode = 'auto';
+    delete wire.routeWarning;
+    routeBaselines.set(wire, terminalSignature(context));
+    if (remember) saveRouteScene();
+  } else wire.routeWarning = result.reason;
+  return result;
+}
 
-  if (!checkPathCollision(wire, start, end)) {
-    wire.bends = null;
-    return;
+/** Called by document mutations, never by rendering or undo/redo. */
+export function maintainWireRoutes({ reroute = true, moduleId = null } = {}) {
+  const index = buildModulePortIndex();
+  for (const wire of state.wires) {
+    const mode = routeMode(wire);
+    if (mode === 'simple') continue;
+    const context = getWireRouteContext(wire, index);
+    if (!context) continue;
+    const signature = terminalSignature(context);
+    const changed = routeBaselines.get(wire) !== signature;
+    if (moduleId && wire.from.moduleId !== moduleId && wire.to.moduleId !== moduleId && !reroute) continue;
+    let points = getWirePathPoints(wire, context.start, context.end);
+    if (changed) {
+      points = repairRoute(points, context);
+      if (points.length - 2 <= DIAGRAM_LIMITS.bendsPerWire) wire.bends = points.slice(1, -1);
+      else {
+        // A failed endpoint repair must not commit a diagonal route. Roll back
+        // the complete geometry edit, including wires already repaired above.
+        if (routeScene) {
+          state.modules = routeScene.modules.map(({ mod, data }) => {
+            for (const key of Object.keys(mod)) delete mod[key];
+            Object.assign(mod, structuredClone(data));
+            return mod;
+          });
+          state.wires = routeScene.wires.map(saved => saved.wire);
+          restoreWireRoutes(routeScene.wires);
+        }
+        wire.routeWarning = 'Endpoint repair exceeds the bend-point limit. Adjust the route.';
+        return false;
+      }
+    }
+    routeBaselines.set(wire, signature);
+    const valid = validateRoute(points, context);
+    if (!valid && mode === 'auto' && reroute) {
+      setWireSmartBends(wire, { remember: false });
+    } else if (!valid) {
+      wire.routeWarning = 'Route conflicts with a module or port direction. Adjust it or recompute Smart Route.';
+    } else delete wire.routeWarning;
   }
+  if (reroute) saveRouteScene();
+  return true;
+}
 
-  const smartRoute = computeSmartRoute(wire, start, end);
-  if (smartRoute) {
-    wire.bends = smartRoute
-      .slice(0, DIAGRAM_LIMITS.bendsPerWire)
-      .map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) }));
-  }
+export function finishWireEdit(wire) {
+  if (!wire || routeMode(wire) === 'simple') return;
+  const context = getWireRouteContext(wire);
+  if (!context) return;
+  const points = simplifyRoute(getWirePathPoints(wire, context.start, context.end));
+  wire.bends = points.slice(1, -1);
+  routeBaselines.set(wire, terminalSignature(context));
+  if (!validateRoute(points, context)) wire.routeWarning = 'Manual route conflicts with a module or port direction.';
+  else delete wire.routeWarning;
+  saveRouteScene();
+}
+
+export function editWireSegment(wire, index, value) {
+  const context = getWireRouteContext(wire);
+  if (!context) return false;
+  const points = moveRouteSegment(getWirePathPoints(wire, context.start, context.end), index, value, context);
+  if (!points) return false;
+  wire.bends = points.slice(1, -1);
+  wire.routingMode = 'manual';
+  return true;
 }
 
 function getDefaultWireRoute(from, to) {
@@ -378,6 +300,7 @@ export function createWire(from, to, selectCallback) {
   // 默认不开启智能连线
   // setWireSmartBends(wire);
   state.wires.push(wire);
+  saveRouteScene();
   if (selectCallback) {
     selectCallback({ type: "wire", id: wire.id });
   }
@@ -417,6 +340,8 @@ function patchWireGeometry(wire, portIndex = null) {
       : `Wire, ${describeRef(wire.from)} to ${describeRef(wire.to)}`
   );
   entry.path.setAttribute("stroke", strokeColor);
+  if (wire.routeWarning) entry.path.classList.add('route-conflict');
+  else entry.path.classList.remove('route-conflict');
   entry.path.setAttribute("stroke-width", isSelected ? baseWidth + 1 : baseWidth);
   if (dash) {
     entry.path.setAttribute("stroke-dasharray", dash);
@@ -543,7 +468,7 @@ export function updateWires(selectCallback, startWireDragCallback) {
     const dash = WIRE_STYLES[wire.style] || "";
     const pathAttrs = {
       d: buildWirePath(wire, start, end),
-      class: `wire wire-visual${isSelected ? " selected" : ""}`,
+      class: `wire wire-visual${isSelected ? " selected" : ""}${wire.routeWarning ? ' route-conflict' : ''}`,
       stroke: strokeColor,
       "stroke-width": strokeWidth,
     };

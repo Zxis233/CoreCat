@@ -3,6 +3,7 @@
  */
 
 import { DEFAULT_WIRE } from './constants.js';
+import { routeMode, simplifyRoute } from './wire-routing.js';
 
 const LABEL_OFFSET = 10;
 const LABEL_ALONG_OFFSET = 10;
@@ -19,49 +20,7 @@ export function pointKey(point) {
 }
 
 export function getWireBendPoints(wire, start, end) {
-  if (!start || !end) {
-    return [];
-  }
-
-  let points = [];
-
-  if (Array.isArray(wire.bends) && wire.bends.length > 0) {
-    points = wire.bends.map((bend) => ({ x: bend.x, y: bend.y }));
-  } else {
-    if (start.x === end.x || start.y === end.y) {
-      return [];
-    }
-    if (wire.route === "V") {
-      points = [
-        { x: start.x, y: wire.bend },
-        { x: end.x, y: wire.bend },
-      ];
-    } else {
-      points = [
-        { x: wire.bend, y: start.y },
-        { x: wire.bend, y: end.y },
-      ];
-    }
-  }
-
-  const startKey = pointKey(start);
-  const endKey = pointKey(end);
-  const seen = new Set();
-  const result = [];
-
-  for (const point of points) {
-    const key = pointKey(point);
-    if (key === startKey || key === endKey) {
-      continue;
-    }
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    result.push(point);
-  }
-
-  return result;
+  return simplifyRoute(getWirePathPoints(wire, start, end)).slice(1, -1);
 }
 
 export function getWirePathPoints(wire, start, end) {
@@ -69,7 +28,7 @@ export function getWirePathPoints(wire, start, end) {
     return [];
   }
 
-  if (Array.isArray(wire.bends) && wire.bends.length > 0) {
+  if (Array.isArray(wire.bends) && (wire.bends.length > 0 || routeMode(wire) !== 'simple')) {
     return [start, ...wire.bends, end];
   }
 
@@ -349,31 +308,19 @@ export function computeWireOverlapKeys(renderItems, bendPointMap, renderItemMap)
 }
 
 export function buildWirePath(wire, start, end) {
-  if (Array.isArray(wire.bends) && wire.bends.length > 0) {
-    let path = `M ${start.x} ${start.y}`;
-    for (const bend of wire.bends) {
-      path += ` L ${bend.x} ${bend.y}`;
-    }
-    path += ` L ${end.x} ${end.y}`;
-    return path;
-  }
-
-  if (wire.route === "V") {
-    const midY = wire.bend;
-    return `M ${start.x} ${start.y} L ${start.x} ${midY} L ${end.x} ${midY} L ${end.x} ${end.y}`;
-  }
-  const midX = wire.bend;
-  return `M ${start.x} ${start.y} L ${midX} ${start.y} L ${midX} ${end.y} L ${end.x} ${end.y}`;
+  return simplifyRoute(getWirePathPoints(wire, start, end))
+    .map((p, i) => `${i ? 'L' : 'M'} ${p.x} ${p.y}`).join(' ');
 }
 
 export function getWireHandlePositions(wire, start, end) {
-  if (Array.isArray(wire.bends) && wire.bends.length > 0) {
+  if (Array.isArray(wire.bends) && (wire.bends.length > 0 || routeMode(wire) !== 'simple')) {
     const handles = [];
     const points = [start, ...wire.bends, end];
 
-    for (let i = 0; i < points.length - 1; i++) {
+    for (let i = 1; i < points.length - 2; i++) {
       const p1 = points[i];
       const p2 = points[i + 1];
+      if ((p1.x === p2.x && p1.y === p2.y) || (p1.x !== p2.x && p1.y !== p2.y)) continue;
       handles.push({
         x: (p1.x + p2.x) / 2,
         y: (p1.y + p2.y) / 2,
@@ -433,8 +380,9 @@ export function wireLabelPosition(wire, start, end) {
   const labelOffset = LABEL_OFFSET + extraOffset;
   const labelAt = wire && wire.labelAt === "start" ? "start" : "end";
   const isStart = labelAt === "start";
-  const segmentStart = isStart ? start : getWireEndSegmentStart(wire, end);
-  const segmentEnd = isStart ? getWireStartSegmentEnd(wire, start) : end;
+  const points = simplifyRoute(getWirePathPoints(wire, start, end));
+  const segmentStart = isStart ? start : (points.at(-2) || start);
+  const segmentEnd = isStart ? (points[1] || end) : end;
   const point = isStart ? start : end;
   const dx = segmentEnd.x - segmentStart.x;
   const dy = segmentEnd.y - segmentStart.y;

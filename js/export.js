@@ -33,8 +33,10 @@ import {
   collectWireRenderItems,
   computeWireOverlapKeys,
   BEND_MARKER_MIN_RADIUS,
-  BEND_MARKER_OVERLAP_BOOST
+  BEND_MARKER_OVERLAP_BOOST,
+  rememberWireRoutes
 } from './wire.js';
+import { routeMode } from './wire-routing.js';
 import { ensureMuxPorts, isKnownModuleType } from './module.js';
 import {
   DIAGRAM_SCHEMA_VERSION,
@@ -721,6 +723,7 @@ export function serializeState() {
       label: wire.label,
       labelAt: wire.labelAt,
       route: wire.route,
+      routingMode: routeMode(wire),
       bend: wire.bend,
       bends: Array.isArray(wire.bends)
         ? wire.bends.map((bend) => ({ x: bend.x, y: bend.y }))
@@ -799,6 +802,7 @@ export function loadState(data, callbacks, options = {}) {
     }
   });
 
+  rememberWireRoutes();
   if (callbacks) {
     callbacks.renderModules();
     callbacks.updateWires();

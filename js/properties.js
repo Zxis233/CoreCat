@@ -18,6 +18,8 @@ import { clamp, getModuleById, applyCanvasBackground, applyPortLabelSize, isCloc
 import { scheduleAutoSave } from './export.js';
 import { describePortRef } from './port.js';
 import { recordHistory, recordCoalescedHistory } from './history.js';
+import { routeMode } from './wire-routing.js';
+import { editWireSegment, finishWireEdit, getWireRouteContext, getWireHandlePositions, maintainWireRoutes } from './wire.js';
 import {
   addPort as addModulePort,
   deleteModule,
@@ -518,6 +520,17 @@ function renderModuleProperties(mod, renderModulesCallback, updateWiresCallback,
  * 渲染连线属性
  */
 function renderWireProperties(wire, updateWiresCallback, renderPropertiesCallback, updateStatusCallback, renderModulesCallback) {
+  const modeLabel = document.createElement('div');
+  modeLabel.className = 'empty-state';
+  modeLabel.textContent = `Routing: ${routeMode(wire) === 'auto' ? 'Smart (Auto)' : routeMode(wire) === 'manual' ? 'Manual' : 'Simple'}`;
+  propertiesContent.appendChild(modeLabel);
+  if (wire.routeWarning) {
+    const warning = document.createElement('div');
+    warning.className = 'empty-state';
+    warning.setAttribute('role', 'status');
+    warning.textContent = wire.routeWarning;
+    propertiesContent.appendChild(warning);
+  }
   const labelField = makeField(
     "Label",
     makeTextInput(wire.label, (value) => {
@@ -595,48 +608,40 @@ function renderWireProperties(wire, updateWiresCallback, renderPropertiesCallbac
       }
     )
   );
-  propertiesContent.appendChild(routeField);
+  if (routeMode(wire) === 'simple') propertiesContent.appendChild(routeField);
 
-  if (Array.isArray(wire.bends) && wire.bends.length > 0) {
+  if (routeMode(wire) !== 'simple') {
     const bendsField = document.createElement("div");
     bendsField.className = "field";
     const bendsLabel = document.createElement("label");
-    bendsLabel.textContent = "Bend Points";
+    bendsLabel.textContent = "Route Segments";
     bendsField.appendChild(bendsLabel);
 
     const bendsList = document.createElement("div");
     bendsList.className = "port-list";
 
-    wire.bends.forEach((bend, index) => {
-      const row = document.createElement("div");
-      row.className = "port-row";
-
-      const label = document.createElement("span");
-      label.textContent = `Point ${index + 1}`;
-      label.style.fontSize = "12px";
-      label.style.color = "var(--muted)";
-
-      const xInput = makeNumberInput(bend.x, { step: 1 }, (value) => {
-        wire.bends[index].x = Math.round(value);
+    const context = getWireRouteContext(wire);
+    const handles = context ? getWireHandlePositions(wire, context.start, context.end) : [];
+    handles.forEach(handle => {
+      const axis = handle.isHorizontal ? 'y' : 'x';
+      const input = makeNumberInput(handle[axis], { step: 'any' }, value => {
+        const i = handle.segmentIndex;
+        if (!wire.bends[i - 1] || !wire.bends[i]) return;
+        if (!editWireSegment(wire, i, value)) return;
+        input.value = wire.bends[i - 1][axis];
         updateWiresCallback();
       });
-      xInput.placeholder = "X";
-      xInput.title = "X position";
-      xInput.setAttribute("aria-label", `Bend point ${index + 1} X position`);
-
-      const yInput = makeNumberInput(bend.y, { step: 1 }, (value) => {
-        wire.bends[index].y = Math.round(value);
-        updateWiresCallback();
+      input.addEventListener('change', () => {
+        finishWireEdit(wire);
+        updateWiresCallback({ immediate: true });
+        renderPropertiesCallback();
       });
-      yInput.placeholder = "Y";
-      yInput.title = "Y position";
-      yInput.setAttribute("aria-label", `Bend point ${index + 1} Y position`);
-
-      row.appendChild(label);
-      row.appendChild(xInput);
-      row.appendChild(yInput);
-      bendsList.appendChild(row);
+      bendsList.appendChild(makeField(`Segment ${handle.segmentIndex} ${axis.toUpperCase()}`, input));
     });
+    const hint = document.createElement('div');
+    hint.className = 'empty-state';
+    hint.textContent = 'Move internal segments to adjust the route. Port segments stay anchored. Manual routes keep their interior layout.';
+    bendsList.appendChild(hint);
 
     bendsField.appendChild(bendsList);
     propertiesContent.appendChild(bendsField);
@@ -656,7 +661,8 @@ function renderWireProperties(wire, updateWiresCallback, renderPropertiesCallbac
     recomputeRow.className = "action-row";
     recomputeRow.appendChild(
       makeButton("Recompute Smart Route", "btn-accent", () => {
-        recomputeWireSmartRoute(wire);
+        const result = recomputeWireSmartRoute(wire);
+        if (!result.ok && typeof alert === 'function') alert(result.reason);
         updateWiresCallback({ immediate: true });
         renderPropertiesCallback();
       })
@@ -676,7 +682,8 @@ function renderWireProperties(wire, updateWiresCallback, renderPropertiesCallbac
     smartRouteRow.className = "action-row";
     smartRouteRow.appendChild(
       makeButton("Enable Smart Route", "btn-accent", () => {
-        recomputeWireSmartRoute(wire);
+        const result = recomputeWireSmartRoute(wire);
+        if (!result.ok && typeof alert === 'function') alert(result.reason);
         updateWiresCallback({ immediate: true });
         renderPropertiesCallback();
       })
@@ -717,11 +724,21 @@ export function renderProperties(renderModulesCallback, updateWiresCallback, upd
     scheduleAutoSave();
   };
   const renderModules = (options) => {
+    const maintained = maintainWireRoutes();
     renderModulesCallback(options);
+    if (!maintained) {
+      if (typeof alert === 'function') alert('Edit canceled: endpoint repair exceeds the bend-point limit.');
+      renderPropertiesCallback();
+    }
     commitHistory(options);
   };
   const updateWires = (options) => {
+    const maintained = maintainWireRoutes();
     updateWiresCallback(options);
+    if (!maintained) {
+      if (typeof alert === 'function') alert('Edit canceled: endpoint repair exceeds the bend-point limit.');
+      renderPropertiesCallback();
+    }
     commitHistory(options);
   };
   const renderPropertiesCallback = () => renderProperties(renderModulesCallback, updateWiresCallback, updateStatusCallback);
